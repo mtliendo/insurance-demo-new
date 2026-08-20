@@ -1,6 +1,7 @@
 -- Hero Shield Insurance — schema
 -- Replaces the DynamoDB `messages` / `claims` tables from the CDK backend.
--- Apply with: psql "$DATABASE_URL" -f db/schema.sql
+-- Apply with the Neon MCP server (`run_sql_transaction`, one statement per entry)
+-- or: psql "$DATABASE_URL" -f db/schema.sql. Idempotent either way. See SETUP.md.
 
 create table if not exists claims (
   id                   uuid primary key default gen_random_uuid(),

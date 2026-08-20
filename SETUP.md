@@ -1,0 +1,207 @@
+# Setup
+
+Everything this app needs to run locally: **three sets of secrets** (Auth0, Neon,
+Anthropic) and **one schema migration**. Nothing else — no cloud infrastructure,
+no build step beyond `pnpm dev`.
+
+This document is written for a coding agent working with a human who has the
+accounts. An agent can do most of this end-to-end; the two things it cannot do
+alone are read secrets out of the Auth0 dashboard and mint an Anthropic API key.
+Ask for those, don't guess.
+
+> **Never print a filled-in `.env.local` back into the chat, a commit, or a PR
+> description.** `.gitignore` already excludes `.env*` except `.env.example`.
+> Write values into the file, then confirm which keys are set — not what they are.
+
+---
+
+## 0. Prerequisites
+
+| Tool | Version | Notes |
+| ---- | ------- | ----- |
+| Node | 22+ | |
+| pnpm | 11+ | `packageManager` in `package.json` pins 11.5.0 |
+| Neon MCP server | — | how the agent provisions the database (step 2) |
+| Auth0 CLI | optional | `brew install auth0/auth0-cli/auth0` — makes step 1 scriptable |
+| `psql` | optional | only needed for the non-MCP fallback in step 2 |
+
+```bash
+pnpm install
+cp .env.example .env.local
+```
+
+`.env.local` is where every value below lands. It is read by `next dev` — restart
+the dev server after editing it.
+
+---
+
+## 1. Auth0
+
+The app uses `@auth0/nextjs-auth0` v4 with a **server-side session cookie**, so it
+needs a **Regular Web Application** — *not* a Single Page Application. A SPA has
+no client secret and this app will fail to start without one.
+
+### Option A — Auth0 CLI (agent-runnable)
+
+```bash
+auth0 login                                    # opens a browser; the human does this once
+auth0 apps create \
+  --name "Hero Shield Insurance (local)" \
+  --type regular \
+  --callbacks "http://localhost:3000/auth/callback" \
+  --logout-urls "http://localhost:3000" \
+  --reveal-secrets
+```
+
+The output carries `CLIENT ID` and `CLIENT SECRET`. Get the tenant domain with
+`auth0 tenants list` — use the bare host, e.g. `dev-2zis9k18.us.auth0.com`, with
+**no `https://`** prefix.
+
+### Option B — dashboard (ask the human)
+
+Applications → Create Application → **Regular Web Application** → Settings:
+
+- **Allowed Callback URLs**: `http://localhost:3000/auth/callback`
+- **Allowed Logout URLs**: `http://localhost:3000`
+
+Then ask the human for Domain, Client ID, and Client Secret from that Settings tab.
+
+### Fill in
+
+```dotenv
+APP_BASE_URL=http://localhost:3000
+AUTH0_DOMAIN=your-tenant.us.auth0.com
+AUTH0_CLIENT_ID=...
+AUTH0_CLIENT_SECRET=...
+AUTH0_SECRET=            # generate: openssl rand -hex 32
+```
+
+`AUTH0_SECRET` encrypts the session cookie. It is generated locally, not fetched
+from Auth0 — an agent can and should just run `openssl rand -hex 32` itself.
+
+### Optional: the `policyId` custom claim
+
+The demo reads a namespaced claim off the session:
+
+```
+https://claims.interview-demo.com/policyId
+```
+
+Add a post-login Action to set it if you want a stable policy number per user:
+
+```js
+exports.onExecutePostLogin = async (event, api) => {
+  api.idToken.setCustomClaim(
+    'https://claims.interview-demo.com/policyId',
+    'POL-2026-12345',
+  )
+}
+```
+
+Without the Action nothing breaks — [lib/auth0.ts](lib/auth0.ts) falls back to
+`generatePolicyId()` and makes one up per claim.
+
+`AUTH0_AUDIENCE` in `.env.example` stays commented out. It is only needed if you
+want an access token for a *separate* API; this app has none.
+
+---
+
+## 2. Neon database (use the Neon MCP server)
+
+The agent should drive this with the **Neon MCP server** rather than asking the
+human to click through the console. The full sequence:
+
+1. **`list_projects`** — reuse an existing project if one obviously fits;
+   otherwise create.
+2. **`create_project`** with name `insurance-demo`. Note the returned project ID.
+3. **`run_sql_transaction`** against that project's `main` branch, passing the
+   statements from [db/schema.sql](db/schema.sql). Read the file and pass each
+   `create table` / `create index` as a separate statement in the array — the
+   file is idempotent (`if not exists` throughout), so re-running is safe.
+4. **`get_connection_string`** for the project's `main` branch and database
+   `neondb`. Write the result into `.env.local` as `DATABASE_URL`.
+5. **`get_database_tables`** to verify. Expect three tables: `claims`,
+   `messages`, `claim_approvals`.
+
+```dotenv
+DATABASE_URL=postgresql://...@ep-....neon.tech/neondb?sslmode=require
+```
+
+The connection string **must** keep `?sslmode=require` — `@neondatabase/serverless`
+talks to Neon's pooled HTTP endpoint and the driver expects it.
+
+### Fallback without MCP
+
+```bash
+psql "$DATABASE_URL" -f db/schema.sql
+```
+
+### What the schema is for
+
+| Table | Replaces | Role |
+| ----- | -------- | ---- |
+| `claims` | DynamoDB `claims` | One row per claim; `status` drives the whole demo |
+| `messages` | DynamoDB `messages` | Chat transcript, so a refresh resumes the claim |
+| `claim_approvals` | AppSync `CLAIM_APPROVAL` events | One row per audience approver |
+
+---
+
+## 3. Anthropic API key
+
+Drives the claims agent in [lib/agent/](lib/agent/). Ask the human for a key from
+[console.anthropic.com](https://console.anthropic.com/settings/keys) — an agent
+cannot mint one.
+
+```dotenv
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The agent calls `claude-opus-5` at `effort: 'low'` ([lib/agent/run.ts](lib/agent/run.ts)).
+The key must belong to a workspace with credit; a `401`/`400` from the chat route
+shows up in the UI as *"Sorry, I encountered an error."* and in the server log as
+`Agent error:`.
+
+---
+
+## 4. Verify
+
+```bash
+pnpm build    # typechecks + builds; catches missing config that isn't env-dependent
+pnpm dev
+```
+
+Then walk the happy path:
+
+1. `http://localhost:3000` → **Login** → Auth0 Universal Login. A redirect loop
+   or a callback error here is almost always a mismatched Allowed Callback URL.
+2. `/profile` → your Auth0 user renders, plus the `policyId` claim (or a "Claim not set" badge).
+3. `/file-claim` → the agent greets you. Describe an incident ("the Hulk threw my
+   car across 5th Avenue, it's totaled"). The sidebar fills in when the agent
+   calls `save_claim_details` — that write is visible in Neon:
+   `select * from claims order by created_at desc limit 1`.
+4. Confirm submission → `status` flips to `awaiting_approval` and the page polls
+   every 2s.
+5. `/approve` in a second browser (or private window — one vote per cookie) →
+   approve 3 times → the claim page picks it up and fires confetti.
+
+### Troubleshooting
+
+| Symptom | Cause |
+| ------- | ----- |
+| `DATABASE_URL is not set. Copy .env.example to .env.local.` | `.env.local` missing or dev server not restarted after editing it |
+| Redirect loop at `/auth/login` | `APP_BASE_URL` doesn't match the URL you're browsing, or `AUTH0_SECRET` is missing/short |
+| `Callback URL mismatch` from Auth0 | Allowed Callback URL must be exactly `http://localhost:3000/auth/callback` |
+| Sign-in works but every page 401s | App created as a SPA — recreate it as a Regular Web Application |
+| Agent replies "Sorry, I encountered an error" | Bad or unfunded `ANTHROPIC_API_KEY`; check the server log for `Agent error:` |
+| `relation "claims" does not exist` | Step 2's migration never ran against the branch this `DATABASE_URL` points at |
+| Approvals never release the claim | Same browser voting repeatedly — `(claim_id, approver_id)` is unique, so repeat votes are a no-op |
+
+---
+
+## Reset between demos
+
+Wipe the claims (cascades to messages and approvals) via Neon MCP `run_sql`, or:
+
+```sql
+truncate claims cascade;
+```
