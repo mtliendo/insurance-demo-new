@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { CheckCircle2, ShieldCheck } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { CheckCircle2, Radar, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -21,6 +21,27 @@ export function ApproveClient() {
   const [claims, setClaims] = useState<ApprovalQueueItem[] | null>(null)
   const [pending, setPending] = useState<string | null>(null)
 
+  /**
+   * Claims whose approval count just climbed. Everyone in the room is watching
+   * the same queue, so a vote landing from someone else's phone should be
+   * visible here rather than silently redrawing the bar.
+   */
+  const [flashing, setFlashing] = useState<Set<string>>(new Set())
+  const counts = useRef<Map<string, number>>(new Map())
+
+  const applyQueue = (next: ApprovalQueueItem[]) => {
+    const climbed = next.filter(
+      (claim) => (counts.current.get(claim.claimId) ?? claim.approvalCount) < claim.approvalCount,
+    )
+    next.forEach((claim) => counts.current.set(claim.claimId, claim.approvalCount))
+    setClaims(next)
+
+    if (climbed.length > 0) {
+      setFlashing(new Set(climbed.map((claim) => claim.claimId)))
+      setTimeout(() => setFlashing(new Set()), 1500)
+    }
+  }
+
   // Polls the queue so every approver sees the count climb as others vote.
   useEffect(() => {
     let active = true
@@ -28,7 +49,7 @@ export function ApproveClient() {
     const load = () =>
       fetchQueue()
         .then((next) => {
-          if (active) setClaims(next)
+          if (active) applyQueue(next)
         })
         .catch((error) => console.error('Failed to load approval queue:', error))
 
@@ -49,7 +70,7 @@ export function ApproveClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ claimId }),
       })
-      setClaims(await fetchQueue())
+      applyQueue(await fetchQueue())
     } catch (error) {
       console.error('Failed to approve:', error)
     } finally {
@@ -58,108 +79,147 @@ export function ApproveClient() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex items-center gap-2 mb-2">
-          <ShieldCheck className="h-7 w-7 text-primary" />
-          <h1 className="text-3xl md:text-4xl font-bold">Claims Review</h1>
-        </div>
-        <p className="text-muted-foreground mb-8">
-          You&apos;re on the Hero Shield claims processing team. Review each submitted claim and
-          approve it if it looks legitimate — a claim needs three approvals to go through.
-        </p>
+    <div className="hud-grid relative min-h-screen overflow-hidden p-4 md:p-8">
+      {/* Portal idling off-screen right — the audience screen gets atmosphere too.
+          The wrapper clips it, otherwise it widens the page on phones. */}
+      <div className="portal-ring -right-56 top-32 h-[30rem] w-[30rem] opacity-20" />
 
-        {claims === null && <p className="text-muted-foreground">Loading claims…</p>}
+      <div className="relative mx-auto max-w-3xl">
+        <div className="animate-rise mb-10">
+          <span className="hud-label">Clearance Terminal · Sector 616</span>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/15 ring-1 ring-primary/40">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+            </span>
+            <h1 className="font-display text-3xl font-bold uppercase tracking-tight md:text-4xl">
+              Claims Review
+            </h1>
+          </div>
+          <p className="mt-3 max-w-xl text-muted-foreground">
+            You&apos;re on the Hero Shield claims processing team. Review each submitted claim
+            and approve it if it looks legitimate — a claim needs{' '}
+            <span className="text-gold">three approvals</span> to go through.
+          </p>
+        </div>
+
+        {claims === null && (
+          <div className="flex flex-col items-center gap-5 py-20">
+            <div className="arc-reactor h-16 w-16" />
+            <p className="hud-label animate-blink">Syncing queue…</p>
+          </div>
+        )}
 
         {claims?.length === 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">No claims waiting</CardTitle>
-              <CardDescription>
-                Once someone submits a claim from the chat assistant, it will appear here.
+          <Card className="hud-panel animate-rise rounded-none border-transparent">
+            <CardHeader className="items-center py-14 text-center">
+              <span className="relative mb-5 grid h-16 w-16 place-items-center">
+                {/* Idle radar sweep while the queue is empty. */}
+                <span className="absolute inset-0 rounded-full border border-dashed border-hud/40 [animation:spin_8s_linear_infinite]" />
+                <Radar className="h-7 w-7 text-hud/70" />
+              </span>
+              <CardTitle className="uppercase">No claims waiting</CardTitle>
+              <CardDescription className="max-w-sm">
+                Once someone submits a claim from the chat assistant, it appears here within a
+                few seconds.
               </CardDescription>
             </CardHeader>
           </Card>
         )}
 
-        <div className="space-y-4">
-          {claims?.map((claim) => {
+        <div className="space-y-5">
+          {claims?.map((claim, index) => {
             const isApproved = claim.status === 'approved'
             const remaining = claim.requiredApprovals - claim.approvalCount
+            const progress = (claim.approvalCount / claim.totalApprovers) * 100
 
             return (
-              <Card key={claim.claimId}>
-                <CardHeader className="pb-3">
+              <Card
+                key={claim.claimId}
+                data-stone={isApproved ? 'time' : 'mind'}
+                className={`hud-panel animate-rise rounded-none border-transparent transition-shadow duration-500 ${
+                  isApproved ? 'glow-stone' : ''
+                } ${flashing.has(claim.claimId) ? 'animate-flare' : ''}`}
+                style={{ animationDelay: `${index * 70}ms` }}
+              >
+                <span className="absolute inset-x-0 top-0 h-0.5 bg-[var(--stone)]" />
+
+                <CardHeader className="pb-3 pt-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <CardTitle className="text-lg">{claim.policyId}</CardTitle>
-                      <CardDescription>
+                      <span className="hud-label text-[0.6rem] text-muted-foreground">
+                        Policy
+                      </span>
+                      <CardTitle className="hud-readout mt-0.5 text-lg text-foreground">
+                        {claim.policyId}
+                      </CardTitle>
+                      <CardDescription className="mt-1.5">
                         {claim.incidentDescription ?? 'No description provided'}
                       </CardDescription>
                     </div>
-                    <Badge
-                      variant={isApproved ? 'default' : 'outline'}
-                      className={
-                        isApproved
-                          ? 'bg-green-500 hover:bg-green-600 shrink-0'
-                          : 'border-yellow-500 text-yellow-600 shrink-0'
-                      }
-                    >
-                      {isApproved ? 'Approved' : 'Awaiting approval'}
+                    <Badge variant="stone" className="shrink-0">
+                      {isApproved ? (
+                        'Approved'
+                      ) : (
+                        <>
+                          <span className="h-1.5 w-1.5 rounded-full bg-[var(--stone)] animate-blink" />
+                          Awaiting
+                        </>
+                      )}
                     </Badge>
                   </div>
                 </CardHeader>
                 <Separator />
-                <CardContent className="pt-4 space-y-4">
-                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+
+                <CardContent className="space-y-5 pt-5">
+                  <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <dt className="font-medium">Location</dt>
-                      <dd className="text-muted-foreground">{claim.incidentLocation ?? '—'}</dd>
+                      <dt className="hud-label text-[0.6rem]">Location</dt>
+                      <dd className="mt-1 text-sm text-foreground/85">
+                        {claim.incidentLocation ?? '—'}
+                      </dd>
                     </div>
                     <div>
-                      <dt className="font-medium">Damage</dt>
-                      <dd className="text-muted-foreground">{claim.damageExtent ?? '—'}</dd>
+                      <dt className="hud-label text-[0.6rem]">Damage</dt>
+                      <dd className="mt-1 text-sm text-foreground/85">
+                        {claim.damageExtent ?? '—'}
+                      </dd>
                     </div>
                   </dl>
 
                   <div>
-                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                      <span>Approvals</span>
-                      <span>
+                    <div className="mb-1.5 flex justify-between">
+                      <span className="hud-readout text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
+                        Approvals
+                      </span>
+                      <span className="hud-readout text-[0.7rem] text-[var(--stone)]">
                         {claim.approvalCount}/{claim.totalApprovers}
                       </span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all duration-500 ${
-                          isApproved ? 'bg-green-500' : 'bg-yellow-500'
-                        }`}
-                        style={{
-                          width: `${(claim.approvalCount / claim.totalApprovers) * 100}%`,
-                        }}
-                      />
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div className="energy-fill h-full rounded-full" style={{ width: `${progress}%` }} />
                     </div>
                     {!isApproved && remaining > 0 && (
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="mt-2 text-xs text-muted-foreground">
                         {remaining} more approval{remaining > 1 ? 's' : ''} needed
                       </p>
                     )}
                   </div>
 
                   {isApproved ? (
-                    <div className="flex items-center gap-2 text-sm text-green-600">
+                    <div className="flex items-center gap-2 text-sm text-stone-time">
                       <CheckCircle2 className="h-4 w-4" />
                       Claim approved
                     </div>
                   ) : claim.alreadyApproved ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <CheckCircle2 className="h-4 w-4" />
+                      <CheckCircle2 className="h-4 w-4 text-hud" />
                       You approved this claim
                     </div>
                   ) : (
                     <Button
                       onClick={() => void approve(claim.claimId)}
                       disabled={pending === claim.claimId}
+                      size="lg"
                       className="w-full sm:w-auto"
                     >
                       {pending === claim.claimId ? 'Approving…' : 'Approve claim'}
