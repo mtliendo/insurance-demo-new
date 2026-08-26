@@ -1,6 +1,7 @@
 'use client'
 
 import { CheckCircle2, Key, Shield, XCircle } from 'lucide-react'
+import { hostConnectAccountHref } from '@/lib/google-connect'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -75,7 +76,7 @@ export function SettingsClient({
           </CardHeader>
           <CardContent className="space-y-4">
             <a
-              href="/auth/connect?connection=google-oauth2&returnTo=/settings"
+              href={hostConnectAccountHref()}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-gradient-to-b from-gold to-[oklch(0.7_0.15_72)] px-5 py-2.5 font-display text-xs font-semibold uppercase tracking-[0.12em] text-[oklch(0.16_0.03_266)]"
             >
               {googleConnected ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}

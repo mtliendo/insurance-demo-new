@@ -1,6 +1,7 @@
 import { auth0 } from '@/lib/auth0'
+import { GOOGLE_CONNECTION } from '@/lib/google-connect'
 
-export const GOOGLE_CONNECTION = 'google-oauth2'
+export { GOOGLE_CONNECTION, hostConnectAccountHref } from '@/lib/google-connect'
 
 export async function isGoogleConnected(): Promise<boolean> {
   try {

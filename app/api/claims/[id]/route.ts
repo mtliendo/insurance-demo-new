@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth0 } from '@/lib/auth0'
 import { pollCibaForClaim } from '@/lib/ciba-flow'
 import { getClaim } from '@/lib/claims'
+import { isDemoHost } from '@/lib/host'
 import { buildClaimSnapshot } from '@/lib/snapshot'
 import type { ClaimSnapshot } from '@/lib/types'
 
@@ -10,8 +11,8 @@ import type { ClaimSnapshot } from '@/lib/types'
  * app opened on `interviewDemo/attendee` — the client asks for the whole claim
  * snapshot on an interval instead of reacting to pushed events.
  *
- * While the claim is awaiting the CIBA board, each poll also ticks
- * /oauth/token per auth_req_id we minted.
+ * Host sessions tick due CIBA auth_req_ids (stored interval, floor 5s).
+ * Audience GETs read Neon only — they must not hammer /oauth/token.
  */
 export async function GET(
   _request: Request,
@@ -29,8 +30,12 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  if (claim.status === 'awaiting_approval' || (claim.status === 'approved' && !claim.calendarEventId)) {
-    claim = (await pollCibaForClaim(claim.id)) ?? claim
+  const hostPolling = isDemoHost(session.user)
+  if (
+    hostPolling &&
+    (claim.status === 'awaiting_approval' || (claim.status === 'approved' && !claim.calendarEventId))
+  ) {
+    claim = (await pollCibaForClaim(claim.id, session.user)) ?? claim
   }
 
   const snapshot: ClaimSnapshot = await buildClaimSnapshot(claim)

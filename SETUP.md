@@ -107,8 +107,11 @@ Without the Action nothing breaks — [lib/auth0.ts](lib/auth0.ts) falls back to
 `AUTH0_AUDIENCE` in `.env.example` stays commented out. It is only needed if you
 want an access token for a *separate* API; this app has none.
 
-Set `DEMO_HOST_EMAIL` (Focus) so audience logins cannot pick the board or
-connect Google. Unset, any signed-in user can operate — fine for local work.
+`DEMO_HOST_EMAIL` or `DEMO_HOST_SUB` is **required**. The host gate fails
+closed if both are empty — nobody can pick the board, start CIBA, or connect
+Google. Set Focus's email (and `sub` once you have it) so audience logins
+cannot operate the console. Token Vault calendar writes additionally require
+the current session `sub` to match `DEMO_HOST_SUB` when that env is set.
 
 ### CIBA email grant
 
@@ -140,13 +143,15 @@ Follow the pattern in
 1. Enable Token Vault on the tenant and add a **Google OAuth 2.0** connection
    with Calendar scope.
 2. Enable that connection on this application.
-3. [lib/auth0.ts](lib/auth0.ts) sets `enableConnectAccountEndpoint: true` and
-   `authorizationParameters.scope` to
-   `openid profile email offline_access https://www.googleapis.com/auth/calendar`.
-4. Host clicks **Connect Google Calendar** → `/auth/connect?connection=google-oauth2`.
-5. After three CIBA yeses the app calls
+3. [lib/auth0.ts](lib/auth0.ts) sets `enableConnectAccountEndpoint: true`.
+   Login scope is `openid profile email offline_access` only — **no Google
+   calendar scope** on audience Universal Login.
+4. Host clicks **Connect Google Calendar** → `/auth/connect` (proxy-gated to
+   the host) with `scopes=https://www.googleapis.com/auth/calendar`.
+5. After three CIBA yeses the **host session** calls
    `auth0.getAccessTokenForConnection({ connection: 'google-oauth2' })` and
-   `POST`s the Google Calendar REST API ([lib/google-calendar.ts](lib/google-calendar.ts)).
+   writes Calendar REST ([lib/google-calendar.ts](lib/google-calendar.ts)).
+   A non-host poller does not write. There is no public `POST /api/calendar`.
 
 If the host has not connected Google, **CIBA is not sent**. The host console
 says so. A board yes with nowhere to write the calendar event is a hollow
@@ -247,7 +252,9 @@ Then walk the happy path:
 | Agent replies "Sorry, I encountered an error" | Bad or unfunded `ANTHROPIC_API_KEY`; check the server log for `Agent error:` |
 | `relation "claims" does not exist` | Step 2's migration never ran against the branch this `DATABASE_URL` points at |
 | Approvals never release the claim | `/approve` likes are not the grant — need 3 CIBA yeses from the seated six |
+| Host console 503 / nobody is host | `DEMO_HOST_EMAIL` and `DEMO_HOST_SUB` are both empty — the gate fails closed |
 | CIBA emails never send | Host has not connected Google, no board picked, or `requested_expiry` is ≤300 (Guardian) |
+| Auth0 `slow_down` on stage | Polls must honor stored `interval_sec` (floor 5). Do not reset after `authorization_pending`. |
 | Board member missing from pick | Email not verified on the Auth0 user, or they are the configured host |
 | Calendar event missing after 3 yeses | Token Vault Google connection dropped; reconnect on `/settings` |
 

@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db'
+import { CIBA_INTERVAL_FLOOR, isPollDue } from '@/lib/ciba-interval'
 import type { CibaBoardMember, CibaStatus } from '@/lib/types'
 import { CIBA_REQUIRED_APPROVALS } from '@/lib/types'
 
@@ -14,6 +15,7 @@ export type CibaRow = {
   interval_sec: number
   expires_at: Date | string | null
   error: string | null
+  last_polled_at: Date | string | null
 }
 
 export function toCibaMember(row: CibaRow): CibaBoardMember {
@@ -81,12 +83,12 @@ export async function insertCibaAuthorization(input: {
   await sql`
     insert into ciba_authorizations (
       claim_id, auth_req_id, sub, email, name, status,
-      binding_message, interval_sec, expires_at, error
+      binding_message, interval_sec, expires_at, error, last_polled_at
     )
     values (
       ${input.claimId}, ${input.authReqId}, ${input.sub}, ${input.email},
       ${input.name}, ${input.status}, ${input.bindingMessage},
-      ${input.intervalSec}, ${input.expiresAt}, ${input.error ?? null}
+      ${input.intervalSec}, ${input.expiresAt}, ${input.error ?? null}, now()
     )
     on conflict (claim_id, sub) do nothing
   `
@@ -105,6 +107,31 @@ export async function updateCibaStatus(
       updated_at = now()
     where auth_req_id = ${authReqId} and status = 'pending'
   `
+}
+
+export function duePendingCiba(rows: CibaRow[]): CibaRow[] {
+  return rows.filter(
+    (row) => row.status === 'pending' && isPollDue(row.last_polled_at, row.interval_sec),
+  )
+}
+
+/**
+ * Claim the next Auth0 poll slot. Returning empty means another request
+ * already ticked this auth_req_id inside the stored interval.
+ */
+export async function claimCibaPollSlot(authReqId: string): Promise<CibaRow | null> {
+  const rows = (await sql`
+    update ciba_authorizations
+    set last_polled_at = now(), updated_at = now()
+    where auth_req_id = ${authReqId}
+      and status = 'pending'
+      and (
+        last_polled_at is null
+        or last_polled_at + (greatest(interval_sec, ${CIBA_INTERVAL_FLOOR}) * interval '1 second') <= now()
+      )
+    returning *
+  `) as CibaRow[]
+  return rows[0] ?? null
 }
 
 export async function countCibaApproved(claimId: string): Promise<number> {

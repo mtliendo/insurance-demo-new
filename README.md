@@ -77,8 +77,9 @@ Only the host hits `/settings` → Connect Google Calendar.
 system prompt, same three tools. `publish_claim_submission` now also starts
 CIBA for the seated six.
 
-**State and realtime.** There is no websocket. `/file-claim` and `/host` poll
-every 2s; each poll ticks pending `auth_req_id`s. [lib/claims.ts](lib/claims.ts)
+**State and realtime.** There is no websocket. `/file-claim` and `/host` refresh
+UI every 2s. Auth0 `/oauth/token` is only hit when a pending `auth_req_id` is
+due: stored `interval_sec`, floor 5s, `slow_down` sticky. [lib/claims.ts](lib/claims.ts)
 plus [lib/board.ts](lib/board.ts) and [lib/ciba-store.ts](lib/ciba-store.ts)
 are the SQL surface.
 
@@ -94,15 +95,14 @@ are the SQL surface.
 | `/profile` | protected | Auth0 profile and the `policyId` custom claim |
 | `/approve` | public | Likes ticker — not the authorization path |
 | `POST /api/claims` | protected | Starts or resumes the caller's claim |
-| `GET /api/claims/[id]` | protected | Claim snapshot — also polls CIBA |
+| `GET /api/claims/[id]` | protected | Claim snapshot; host ticks due CIBA ids |
 | `POST /api/claims/[id]/chat` | protected | One agent turn |
 | `GET \| POST /api/join` | login | Upsert joiner; seat / CIBA status for this phone |
 | `GET /api/board` | host | Joiners + live board + CIBA snapshot |
 | `POST /api/board/pick` | host | Randomly seat 6 (pins first) |
 | `GET \| POST /api/ciba` | host | Board status; manual start if Google/board lagged |
-| `POST /api/ciba/poll` | host | Tick `/oauth/token` per `auth_req_id` |
+| `POST /api/ciba/poll` | host | Tick due `/oauth/token` per `auth_req_id` |
 | `GET /api/connection-status` | host | Token Vault Google connected? |
-| `POST /api/calendar` | host | Google Calendar REST create (Token Vault token) |
 | `GET \| POST /api/approvals` | public | Likes ticker |
 
 ### Layout

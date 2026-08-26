@@ -31,7 +31,8 @@ export async function POST() {
 
   const result = await startCibaForSubmittedClaim(claim.id)
   if (!result.ok) {
-    return NextResponse.json({ error: result.reason }, { status: 409 })
+    const status = result.reason === 'not_host' ? 403 : 409
+    return NextResponse.json({ error: result.reason }, { status })
   }
 
   const next = await getClaim(claim.id)

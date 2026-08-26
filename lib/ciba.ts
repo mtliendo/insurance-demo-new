@@ -90,11 +90,12 @@ export async function pollCiba(authReqId: string) {
   }
 
   const error = json.error
+  const interval = json.interval != null ? Number(json.interval) : undefined
   if (error === 'authorization_pending') {
-    return { status: 'pending' as const, interval: Number(json.interval ?? 5) }
+    return { status: 'pending' as const, interval, slowDown: false as const }
   }
   if (error === 'slow_down') {
-    return { status: 'pending' as const, interval: Number(json.interval ?? 10) }
+    return { status: 'pending' as const, interval, slowDown: true as const }
   }
   if (error === 'access_denied' || error === 'expired_token') {
     return {

@@ -1,10 +1,13 @@
 import { Auth0Client } from '@auth0/nextjs-auth0/server'
 import { NextResponse } from 'next/server'
 
+export const LOGIN_SCOPES = 'openid profile email offline_access'
+
 /**
  * Token Vault connect-account follows
  * https://github.com/mtliendo/auth0-calendar-workshop — host-only Google.
- * Audience login still uses Universal Login; only Focus hits /auth/connect.
+ * Calendar scope is NOT on login. Audience Universal Login stays
+ * openid/profile/email. Only /auth/connect (host-gated) asks Google.
  */
 export const auth0 = new Auth0Client({
   domain: process.env.AUTH0_DOMAIN!,
@@ -14,15 +17,18 @@ export const auth0 = new Auth0Client({
   appBaseUrl: process.env.APP_BASE_URL!,
   enableConnectAccountEndpoint: true,
   authorizationParameters: {
-    scope:
-      'openid profile email offline_access https://www.googleapis.com/auth/calendar',
+    scope: LOGIN_SCOPES,
     audience: process.env.AUTH0_AUDIENCE,
   },
   async onCallback(error, ctx) {
     const appBaseUrl = ctx.appBaseUrl ?? process.env.APP_BASE_URL ?? 'http://localhost:3000'
     if (error) {
+      const connectFailure =
+        ctx.responseType === 'connect_code' ||
+        (ctx.returnTo ?? '').startsWith('/settings')
+      const path = connectFailure ? '/settings' : '/join'
       return NextResponse.redirect(
-        new URL(`/settings?error=${encodeURIComponent(error.message)}`, appBaseUrl),
+        new URL(`${path}?error=${encodeURIComponent(error.message)}`, appBaseUrl),
       )
     }
     return NextResponse.redirect(new URL(ctx.returnTo ?? '/', appBaseUrl))
@@ -49,3 +55,4 @@ export function generatePolicyId(): string {
 export function emailVerifiedFromUser(user: Record<string, unknown>): boolean {
   return user.email_verified === true
 }
+

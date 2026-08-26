@@ -1,23 +1,32 @@
-import { redirect } from 'next/navigation'
 import { auth0 } from '@/lib/auth0'
 import { SiteNav } from '@/components/site-nav'
-import { JoinClient } from '@/components/join-client'
+import { JoinClient, JoinLogin } from '@/components/join-client'
 
 export const metadata = {
   title: 'Join the board — Hero Shield Insurance',
 }
 
-export default async function JoinPage() {
+export default async function JoinPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string | string[] }>
+}) {
   const session = await auth0.getSession()
-  if (!session) redirect('/auth/login?returnTo=/join')
+  const params = await searchParams
+  const error = typeof params.error === 'string' ? params.error : null
 
   return (
     <>
       <SiteNav />
-      <JoinClient
-        userName={session.user.name ?? session.user.email ?? 'there'}
-        userEmail={typeof session.user.email === 'string' ? session.user.email : ''}
-      />
+      {session ? (
+        <JoinClient
+          userName={session.user.name ?? session.user.email ?? 'there'}
+          userEmail={typeof session.user.email === 'string' ? session.user.email : ''}
+          authError={error}
+        />
+      ) : (
+        <JoinLogin authError={error} />
+      )}
     </>
   )
 }

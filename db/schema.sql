@@ -93,6 +93,7 @@ create table if not exists ciba_authorizations (
   interval_sec    int         not null default 5,
   expires_at      timestamptz,
   error           text,
+  last_polled_at  timestamptz,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
   unique (claim_id, sub)
@@ -100,6 +101,8 @@ create table if not exists ciba_authorizations (
 
 create index if not exists ciba_authorizations_claim_id_idx on ciba_authorizations (claim_id);
 create index if not exists ciba_authorizations_status_idx on ciba_authorizations (status);
+
+alter table ciba_authorizations add column if not exists last_polled_at timestamptz;
 
 -- Token Vault calendar event written on the host's Google account after
 -- 3 CIBA yeses. Block reason is set when we refuse to send CIBA (no

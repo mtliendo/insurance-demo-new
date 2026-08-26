@@ -16,12 +16,41 @@ type JoinState = {
 
 const POLL_MS = 2000
 
+export function JoinLogin({ authError }: { authError: string | null }) {
+  return (
+    <JoinShell>
+      {authError && (
+        <p className="mb-4 rounded-sm border border-destructive/40 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
+          {authError}
+        </p>
+      )}
+      <Card className="hud-panel rounded-none border-transparent">
+        <CardHeader className="items-center py-14 text-center">
+          <Radar className="mb-4 h-10 w-10 text-hud" />
+          <CardTitle className="uppercase">Join the room</CardTitle>
+          <CardDescription className="max-w-sm">
+            Log in with Auth0. A verified email is required to sit on the CIBA board.
+          </CardDescription>
+          <a
+            href="/auth/login?returnTo=/join"
+            className="mt-6 inline-flex items-center justify-center rounded-md bg-gradient-to-b from-primary to-[oklch(0.5_0.2_25)] px-5 py-2.5 font-display text-xs font-semibold uppercase tracking-[0.12em] text-primary-foreground"
+          >
+            Log in
+          </a>
+        </CardHeader>
+      </Card>
+    </JoinShell>
+  )
+}
+
 export function JoinClient({
   userName,
   userEmail,
+  authError,
 }: {
   userName: string
   userEmail: string
+  authError?: string | null
 }) {
   const [state, setState] = useState<JoinState | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -135,6 +164,11 @@ export function JoinClient({
 
   return (
     <JoinShell>
+      {authError && (
+        <p className="mb-4 rounded-sm border border-destructive/40 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
+          {authError}
+        </p>
+      )}
       <Card className="hud-panel rounded-none border-transparent">
         <CardHeader className="items-center py-14 text-center">
           <span className="relative mb-5 grid h-16 w-16 place-items-center">

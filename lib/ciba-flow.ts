@@ -1,8 +1,11 @@
 import { getCurrentBoard } from '@/lib/board'
 import { bindingMessageForClaim } from '@/lib/binding-message'
 import { pollCiba, startCiba } from '@/lib/ciba'
+import { CIBA_INTERVAL_FLOOR, floorInterval, nextPollInterval } from '@/lib/ciba-interval'
 import {
+  claimCibaPollSlot,
   countCibaApproved,
+  duePendingCiba,
   hasCibaStarted,
   insertCibaAuthorization,
   listCibaForClaim,
@@ -16,12 +19,16 @@ import {
 } from '@/lib/claims'
 import { createEvent } from '@/lib/google-calendar'
 import { getGoogleAccessToken, isGoogleConnected } from '@/lib/google'
+import { auth0 } from '@/lib/auth0'
+import { canWriteHostCalendar, isDemoHost } from '@/lib/host'
 import { CIBA_REQUIRED_APPROVALS } from '@/lib/types'
 import type { Claim } from '@/lib/types'
 
 export type CibaStartResult =
   | { ok: true; started: number }
-  | { ok: false; reason: 'no_google' | 'no_board' | 'already_started' }
+  | { ok: false; reason: 'no_google' | 'no_board' | 'already_started' | 'not_host' }
+
+type SessionUser = { sub?: string; email?: string | null }
 
 /**
  * When a claim flips to awaiting_approval, email the seated 6 — not the
@@ -31,6 +38,11 @@ export type CibaStartResult =
 export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaStartResult> {
   if (await hasCibaStarted(claimId)) {
     return { ok: false, reason: 'already_started' }
+  }
+
+  const session = await auth0.getSession()
+  if (!session || !isDemoHost(session.user)) {
+    return { ok: false, reason: 'not_host' }
   }
 
   if (!(await isGoogleConnected())) {
@@ -60,7 +72,7 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
         name: member.name,
         status: 'pending',
         bindingMessage: result.bindingMessage,
-        intervalSec: result.interval,
+        intervalSec: floorInterval(result.interval),
         expiresAt,
       })
       started += 1
@@ -74,7 +86,7 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
         name: member.name,
         status: 'error',
         bindingMessage,
-        intervalSec: 5,
+        intervalSec: CIBA_INTERVAL_FLOOR,
         expiresAt: null,
         error: message,
       })
@@ -85,18 +97,28 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
 }
 
 /**
- * Poll every pending auth_req_id we minted. Three yeses release the claim,
- * then write one event on the host's Google Calendar via Token Vault.
+ * Poll due pending auth_req_ids only. Three yeses release the claim,
+ * then write one event on the host's Google Calendar via Token Vault —
+ * and only if this session is the configured host.
  */
-export async function pollCibaForClaim(claimId: string): Promise<Claim | null> {
-  const pending = (await listCibaForClaim(claimId)).filter((row) => row.status === 'pending')
+export async function pollCibaForClaim(
+  claimId: string,
+  actor: SessionUser,
+): Promise<Claim | null> {
+  const pending = duePendingCiba(await listCibaForClaim(claimId))
 
   for (const row of pending) {
+    const slot = await claimCibaPollSlot(row.auth_req_id)
+    if (!slot) continue
+
     const result = await pollCiba(row.auth_req_id)
     if (result.status === 'pending') {
-      if (result.interval) {
-        await updateCibaStatus(row.auth_req_id, 'pending', { intervalSec: result.interval })
-      }
+      const intervalSec = nextPollInterval(
+        slot.interval_sec,
+        result.interval,
+        result.slowDown,
+      )
+      await updateCibaStatus(row.auth_req_id, 'pending', { intervalSec })
       continue
     }
     await updateCibaStatus(row.auth_req_id, result.status, {
@@ -107,7 +129,9 @@ export async function pollCibaForClaim(claimId: string): Promise<Claim | null> {
   const approved = await countCibaApproved(claimId)
   if (approved >= CIBA_REQUIRED_APPROVALS) {
     await approveClaim(claimId)
-    await writeHostCalendarEvent(claimId)
+    if (canWriteHostCalendar(actor)) {
+      await writeHostCalendarEvent(claimId)
+    }
   }
 
   return getClaim(claimId)

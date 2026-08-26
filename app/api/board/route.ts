@@ -14,7 +14,7 @@ export async function GET() {
 
   let claim = await getLatestSubmittedClaim()
   if (claim && (claim.status === 'awaiting_approval' || (claim.status === 'approved' && !claim.calendarEventId))) {
-    claim = (await pollCibaForClaim(claim.id)) ?? claim
+    claim = (await pollCibaForClaim(claim.id, auth.session.user)) ?? claim
   }
 
   const [joiners, board, googleConnected, liveCiba] = await Promise.all([

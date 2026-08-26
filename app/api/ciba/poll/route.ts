@@ -13,7 +13,7 @@ export async function POST() {
     return NextResponse.json({ claim: null, board: null })
   }
 
-  const next = (await pollCibaForClaim(claim.id)) ?? claim
+  const next = (await pollCibaForClaim(claim.id, auth.session.user)) ?? claim
   return NextResponse.json({
     claim: {
       id: next.id,
