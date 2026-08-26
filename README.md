@@ -69,9 +69,10 @@ gates the protected pages. API routes check the session themselves so a
 **not** use `@auth0/ai`. `requested_expiry=600` selects the email channel.
 
 **Token Vault.** [lib/auth0.ts](lib/auth0.ts) sets
-`enableConnectAccountEndpoint: true` and the Google Calendar scope, matching
+`enableConnectAccountEndpoint: true`. Audience login is `openid profile email`
+only — no calendar scope, no `offline_access`. Only the host hits
+`/settings` → `/auth/connect` for Google Calendar, matching
 [mtliendo/auth0-calendar-workshop](https://github.com/mtliendo/auth0-calendar-workshop).
-Only the host hits `/settings` → Connect Google Calendar.
 
 **The agent.** [lib/agent/](lib/agent/) is unchanged in conversation: same
 system prompt, same three tools. `publish_claim_submission` now also starts

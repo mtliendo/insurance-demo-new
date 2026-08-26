@@ -57,28 +57,41 @@ export function JoinClient({
 
   useEffect(() => {
     let active = true
+    let seated = false
+
+    const read = async () => {
+      const res = await fetch('/api/join', { cache: 'no-store' })
+      if (!res.ok) throw new Error(`Status ${res.status}`)
+      const next = (await res.json()) as JoinState
+      if (active) {
+        setState(next)
+        setError(null)
+      }
+    }
 
     const tick = async () => {
       try {
-        const joined = await fetch('/api/join', { method: 'POST' })
-        if (!joined.ok && joined.status !== 409) {
-          const body = await joined.json().catch(() => ({}))
-          throw new Error(body.error || `Join failed (${joined.status})`)
+        if (!seated) {
+          const joined = await fetch('/api/join', { method: 'POST' })
+          if (!joined.ok && joined.status !== 409) {
+            const body = await joined.json().catch(() => ({}))
+            throw new Error(body.error || `Join failed (${joined.status})`)
+          }
+          seated = true
         }
-        const res = await fetch('/api/join', { cache: 'no-store' })
-        if (!res.ok) throw new Error(`Status ${res.status}`)
-        const next = (await res.json()) as JoinState
-        if (active) {
-          setState(next)
-          setError(null)
-        }
+        await read()
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : 'Join failed')
       }
     }
 
     void tick()
-    const timer = setInterval(() => void tick(), POLL_MS)
+    const timer = setInterval(() => {
+      if (!seated) return
+      void read().catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : 'Join failed')
+      })
+    }, POLL_MS)
     return () => {
       active = false
       clearInterval(timer)
@@ -150,6 +163,14 @@ export function JoinClient({
             )}
             {ciba?.status === 'denied' && (
               <Badge variant="destructive">You declined this claim</Badge>
+            )}
+            {ciba?.status === 'error' && (
+              <p className="flex items-center justify-center gap-2 text-sm text-destructive">
+                <TriangleAlert className="h-4 w-4" />
+                {ciba.error
+                  ? `CIBA mail failed: ${ciba.error}`
+                  : 'CIBA mail failed. Tell the operator — your inbox was not reached.'}
+              </p>
             )}
             {ciba?.bindingMessage && (
               <p className="hud-readout text-xs text-muted-foreground">

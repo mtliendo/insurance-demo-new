@@ -1,5 +1,5 @@
 import { auth0 } from '@/lib/auth0'
-import { SiteNav } from '@/components/site-nav'
+import { AudienceNav } from '@/components/site-nav'
 import { JoinClient, JoinLogin } from '@/components/join-client'
 
 export const metadata = {
@@ -17,7 +17,7 @@ export default async function JoinPage({
 
   return (
     <>
-      <SiteNav />
+      <AudienceNav />
       {session ? (
         <JoinClient
           userName={session.user.name ?? session.user.email ?? 'there'}

@@ -1,7 +1,7 @@
 import { ApproveClient } from '@/components/approve-client'
 
 export const metadata = {
-  title: 'Claims Review — Hero Shield Insurance',
+  title: 'Likes — Hero Shield Insurance',
 }
 
 /**

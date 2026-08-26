@@ -92,7 +92,7 @@ export function ApproveClient() {
               <ShieldCheck className="h-5 w-5 text-primary" />
             </span>
             <h1 className="font-display text-3xl font-bold uppercase tracking-tight md:text-4xl">
-              Claims Review
+              Likes
             </h1>
           </div>
           <p className="mt-3 max-w-xl text-muted-foreground">
@@ -129,8 +129,6 @@ export function ApproveClient() {
         <div className="space-y-5">
           {claims?.map((claim, index) => {
             const isApproved = claim.status === 'approved'
-            const remaining = claim.requiredApprovals - claim.approvalCount
-            const progress = (claim.approvalCount / claim.totalApprovers) * 100
 
             return (
               <Card
@@ -195,10 +193,7 @@ export function ApproveClient() {
                         {claim.approvalCount}
                       </span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div className="energy-fill h-full rounded-full" style={{ width: `${progress}%` }} />
-                    </div>
-                    {!isApproved && remaining > 0 && (
+                    {!isApproved && (
                       <p className="mt-2 text-xs text-muted-foreground">
                         Atmosphere only — CIBA yeses on the host board release the claim.
                       </p>

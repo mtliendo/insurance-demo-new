@@ -123,25 +123,32 @@ function shuffle<T>(items: T[]): T[] {
   return copy
 }
 
+/** Verified, non-host joiners — the only people who can sit on the CIBA board. */
+export function eligibleJoiners(joiners: Joiner[]): Joiner[] {
+  return joiners.filter((j) => j.emailVerified && !isHostIdentity(j.sub, j.email))
+}
+
 /**
- * Randomly select up to 6 verified joiners. Pinned rows (planted friends)
+ * Randomly select 6 verified joiners. Pinned rows (planted friends)
  * are always included first; the rest of the seats are shuffled in.
  * The host is never seated — they file the claim, they don't CIBA it.
  */
 export function selectBoard(joiners: Joiner[]): Joiner[] {
-  const eligible = joiners.filter(
-    (j) => j.emailVerified && !isHostIdentity(j.sub, j.email),
-  )
+  const eligible = eligibleJoiners(joiners)
   const pinned = eligible.filter((j) => j.pinned)
   const rest = shuffle(eligible.filter((j) => !j.pinned))
   return [...pinned, ...rest].slice(0, BOARD_SIZE)
 }
 
 export async function pickBoard(pickedBy: string): Promise<BoardMember[]> {
-  const selected = selectBoard(await listJoiners())
-  if (selected.length === 0) {
-    throw new Error('No verified joiners to seat. The room has to log in first.')
+  const joiners = await listJoiners()
+  const eligible = eligibleJoiners(joiners)
+  if (eligible.length < BOARD_SIZE) {
+    throw new Error(
+      `Need ${BOARD_SIZE} verified joiners to pick a board. Currently ${eligible.length}.`,
+    )
   }
+  const selected = selectBoard(joiners)
 
   const pickRows = (await sql`
     insert into board_picks (picked_by)

@@ -173,13 +173,16 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
               <span className="hud-label text-stone-time">Claim cleared</span>
               <CardTitle className="mt-2 text-2xl uppercase">Claim Approved</CardTitle>
               <CardDescription className="text-base">
-                The review team signed off. Your claim is going through.
+                The CIBA board of six hit three email yeses. The claim is
+                released
+                {claim.calendarEventId ? ' and written to the host calendar.' : '.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-5">
               <p className="text-center text-sm text-muted-foreground">
-                We&apos;ve processed your superhero insurance claim and it has been approved.
-                You will receive further details via email.
+                {claim.calendarEventId
+                  ? 'Token Vault wrote the event on the operator calendar. The room likes ticker was never the grant.'
+                  : 'The seated board authorized this claim over CIBA email. The room likes ticker was never the grant.'}
               </p>
               <Button onClick={() => setShowApprovalModal(false)} className="w-full">
                 Acknowledge

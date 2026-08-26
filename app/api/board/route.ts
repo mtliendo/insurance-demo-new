@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireHostSession } from '@/lib/api-auth'
-import { getCurrentBoard, listJoiners } from '@/lib/board'
+import { eligibleJoiners, getCurrentBoard, listJoiners } from '@/lib/board'
 import { hasLiveCiba } from '@/lib/ciba-store'
 import { pollCibaForClaim } from '@/lib/ciba-flow'
 import { getLatestSubmittedClaim } from '@/lib/claims'
@@ -28,6 +28,7 @@ export async function GET() {
     joiners,
     board,
     boardSize: BOARD_SIZE,
+    verifiedCount: eligibleJoiners(joiners).length,
     canPick: !liveCiba,
     googleConnected,
     claim: claim

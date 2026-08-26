@@ -144,8 +144,9 @@ Follow the pattern in
    with Calendar scope.
 2. Enable that connection on this application.
 3. [lib/auth0.ts](lib/auth0.ts) sets `enableConnectAccountEndpoint: true`.
-   Login scope is `openid profile email offline_access` only — **no Google
-   calendar scope** on audience Universal Login.
+   Login scope is `openid profile email` only — **no Google calendar
+   scope** and **no `offline_access`** on audience Universal Login. Host
+   Calendar is host-only `/auth/connect`.
 4. Host clicks **Connect Google Calendar** → `/auth/connect` (proxy-gated to
    the host) with `scopes=https://www.googleapis.com/auth/calendar`.
 5. After three CIBA yeses the **host session** calls

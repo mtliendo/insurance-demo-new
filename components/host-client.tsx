@@ -22,6 +22,7 @@ type BoardState = {
   joiners: Joiner[]
   board: { sub: string; email: string; name: string }[]
   boardSize: number
+  verifiedCount: number
   canPick: boolean
   googleConnected: boolean
   claim: {
@@ -112,8 +113,12 @@ export function HostClient({
     }
   }
 
+  const boardSize = state?.boardSize ?? 6
   const verified = state?.joiners.filter((j) => j.emailVerified) ?? []
   const unverified = state?.joiners.filter((j) => !j.emailVerified) ?? []
+  const verifiedCount = state?.verifiedCount ?? verified.length
+  const enoughVerified = verifiedCount >= boardSize
+  const pickEnabled = Boolean(state?.canPick) && enoughVerified && !picking
   const blockReason = state?.claim?.board.blockReason
   const needsCibaStart =
     state?.claim?.status === 'awaiting_approval' &&
@@ -201,10 +206,10 @@ export function HostClient({
                 <div>
                   <CardTitle className="text-base uppercase">Joiners</CardTitle>
                   <CardDescription>
-                    {verified.length} verified · pin planted friends, then pick
+                    {verifiedCount}/{boardSize} verified · pin planted friends, then pick
                   </CardDescription>
                 </div>
-                <Button onClick={() => void pick()} disabled={picking || state?.canPick === false}>
+                <Button onClick={() => void pick()} disabled={!pickEnabled}>
                   <Shuffle className="h-4 w-4" />
                   {picking ? 'Picking…' : 'Pick board'}
                 </Button>
@@ -239,6 +244,12 @@ export function HostClient({
                 {unverified.length > 0 && (
                   <p className="pt-2 text-xs text-muted-foreground">
                     {unverified.length} unverified — they can watch, they cannot sit.
+                  </p>
+                )}
+                {state && !enoughVerified && (
+                  <p className="text-xs text-gold">
+                    Need {boardSize} verified joiners before you can pick. A short
+                    board can never hit three CIBA yeses.
                   </p>
                 )}
                 {state?.canPick === false && (

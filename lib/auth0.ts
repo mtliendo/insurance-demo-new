@@ -1,13 +1,14 @@
 import { Auth0Client } from '@auth0/nextjs-auth0/server'
 import { NextResponse } from 'next/server'
 
-export const LOGIN_SCOPES = 'openid profile email offline_access'
+/** Audience Universal Login. No calendar, no offline_access — host-only connect. */
+export const LOGIN_SCOPES = 'openid profile email'
 
 /**
  * Token Vault connect-account follows
  * https://github.com/mtliendo/auth0-calendar-workshop — host-only Google.
- * Calendar scope is NOT on login. Audience Universal Login stays
- * openid/profile/email. Only /auth/connect (host-gated) asks Google.
+ * Calendar scope and refresh tokens are NOT on login. Audience Universal
+ * Login stays openid/profile/email. Only /auth/connect (host-gated) asks Google.
  */
 export const auth0 = new Auth0Client({
   domain: process.env.AUTH0_DOMAIN!,
