@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk'
+import { startCibaForSubmittedClaim } from '@/lib/ciba-flow'
 import { flagFraud, saveClaimDetails, submitClaim } from '@/lib/claims'
 import { MOCK_VEHICLE_DATA } from '@/lib/agent/system-prompt'
 import type { Claim } from '@/lib/types'
@@ -106,6 +107,7 @@ Ask the user if they are ready to submit this claim for processing.`
         return 'Claim submission cancelled. Ask the user if they would like to make any changes before submitting.'
       }
       await submitClaim(claim.id)
+      await startCibaForSubmittedClaim(claim.id)
       return 'Claim submitted successfully. Thank the user and let them know the Claim Processing team will review this claim and provide a status update.'
     }
 

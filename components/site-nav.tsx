@@ -2,14 +2,15 @@
 
 import Link from 'next/link'
 import { useUser } from '@auth0/nextjs-auth0'
-import { FileText, LogIn, LogOut, ShieldHalf, User } from 'lucide-react'
+import { FileText, LogIn, LogOut, Settings, ShieldHalf, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 const LINKS = [
   { href: '/', label: 'Home' },
-  { href: '/', label: 'Coverage' },
-  { href: '/approve', label: 'Claims Review' },
+  { href: '/join', label: 'Join' },
+  { href: '/host', label: 'Board' },
+  { href: '/approve', label: 'Likes' },
 ]
 
 export function SiteNav() {
@@ -61,6 +62,12 @@ export function SiteNav() {
                   <Link href="/file-claim">
                     <FileText className="mr-2 h-4 w-4" />
                     File a Claim
+                  </Link>
+                </Button>
+                <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+                  <Link href="/settings" aria-label="Host settings">
+                    <Settings className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden md:inline">Settings</span>
                   </Link>
                 </Button>
                 <Link href="/profile" className="group relative">

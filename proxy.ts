@@ -13,7 +13,8 @@ export async function proxy(request: NextRequest) {
   // Auth0 SDK routes.
   if (pathname.startsWith('/auth')) return authRes
 
-  // Public: landing page and the audience approver screen.
+  // Public: landing page and the likes ticker. /join, /host, /settings
+  // require a session so the QR lands in Auth0 Universal Login.
   if (pathname === '/' || pathname.startsWith('/approve')) return authRes
 
   // API routes do their own session check so they can return 401 JSON

@@ -1,14 +1,31 @@
 import { Auth0Client } from '@auth0/nextjs-auth0/server'
+import { NextResponse } from 'next/server'
 
+/**
+ * Token Vault connect-account follows
+ * https://github.com/mtliendo/auth0-calendar-workshop — host-only Google.
+ * Audience login still uses Universal Login; only Focus hits /auth/connect.
+ */
 export const auth0 = new Auth0Client({
   domain: process.env.AUTH0_DOMAIN!,
   clientId: process.env.AUTH0_CLIENT_ID!,
   clientSecret: process.env.AUTH0_CLIENT_SECRET!,
   secret: process.env.AUTH0_SECRET!,
   appBaseUrl: process.env.APP_BASE_URL!,
+  enableConnectAccountEndpoint: true,
   authorizationParameters: {
-    scope: 'openid profile email',
+    scope:
+      'openid profile email offline_access https://www.googleapis.com/auth/calendar',
     audience: process.env.AUTH0_AUDIENCE,
+  },
+  async onCallback(error, ctx) {
+    const appBaseUrl = ctx.appBaseUrl ?? process.env.APP_BASE_URL ?? 'http://localhost:3000'
+    if (error) {
+      return NextResponse.redirect(
+        new URL(`/settings?error=${encodeURIComponent(error.message)}`, appBaseUrl),
+      )
+    }
+    return NextResponse.redirect(new URL(ctx.returnTo ?? '/', appBaseUrl))
   },
 })
 
@@ -27,4 +44,8 @@ export function policyIdFromUser(user: Record<string, unknown>): string | null {
 /** Fallback used when the Auth0 Action isn't configured on the tenant. */
 export function generatePolicyId(): string {
   return `POL-2026-${Math.floor(10000 + Math.random() * 90000)}`
+}
+
+export function emailVerifiedFromUser(user: Record<string, unknown>): boolean {
+  return user.email_verified === true
 }
