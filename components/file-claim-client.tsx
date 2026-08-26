@@ -13,8 +13,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { BoardPanel } from '@/components/board-panel'
 import type { ClaimSnapshot } from '@/lib/types'
-import { REQUIRED_APPROVALS, TOTAL_APPROVERS } from '@/lib/types'
+import { CIBA_REQUIRED_APPROVALS } from '@/lib/types'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -138,8 +139,8 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
     )
   }
 
-  const { claim, messages, approvalCount } = snapshot
-  const remaining = REQUIRED_APPROVALS - approvalCount
+  const { claim, messages, approvalCount, board, googleConnected } = snapshot
+  const remaining = CIBA_REQUIRED_APPROVALS - approvalCount
   const isApproved = claim.status === 'approved'
   const isAwaiting = claim.status === 'awaiting_approval'
 
@@ -172,13 +173,16 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
               <span className="hud-label text-stone-time">Claim cleared</span>
               <CardTitle className="mt-2 text-2xl uppercase">Claim Approved</CardTitle>
               <CardDescription className="text-base">
-                The review team signed off. Your claim is going through.
+                The CIBA board of six hit three email yeses. The claim is
+                released
+                {claim.calendarEventId ? ' and written to the host calendar.' : '.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-5">
               <p className="text-center text-sm text-muted-foreground">
-                We&apos;ve processed your superhero insurance claim and it has been approved.
-                You will receive further details via email.
+                {claim.calendarEventId
+                  ? 'Token Vault wrote the event on the operator calendar. The room likes ticker was never the grant.'
+                  : 'The seated board authorized this claim over CIBA email. The room likes ticker was never the grant.'}
               </p>
               <Button onClick={() => setShowApprovalModal(false)} className="w-full">
                 Acknowledge
@@ -331,41 +335,48 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
                   <span className="hud-label text-[0.6rem]">Status</span>
                   <Badge variant={isApproved ? 'success' : isAwaiting ? 'warning' : 'secondary'}>
                     {isAwaiting
-                      ? `Awaiting ${approvalCount}/${TOTAL_APPROVERS}`
+                      ? `CIBA ${approvalCount}/${CIBA_REQUIRED_APPROVALS}`
                       : isApproved
                         ? 'Approved'
                         : claim.status}
                   </Badge>
                 </div>
 
-                {isAwaiting && (
+                {isAwaiting && !googleConnected && (
+                  <p className="mt-3 text-xs text-gold">
+                    Connect Google Calendar on Settings before CIBA emails go out.
+                    Approval is hollow without a host calendar.
+                  </p>
+                )}
+
+                {isAwaiting && board.blockReason === 'no_board' && (
+                  <p className="mt-3 text-xs text-gold">
+                    Pick a board of six on the host console, then send CIBA.
+                  </p>
+                )}
+
+                {(isAwaiting || isApproved) && board.members.length > 0 && (
                   <div className="animate-fade-in mt-3">
-                    <div className="mb-1.5 flex justify-between">
-                      <span className="hud-readout text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
-                        Approvals
-                      </span>
-                      <span className="hud-readout text-[0.7rem] text-[var(--stone)]">
-                        {approvalCount}/{TOTAL_APPROVERS}
-                      </span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="energy-fill h-full rounded-full"
-                        style={{ width: `${(approvalCount / TOTAL_APPROVERS) * 100}%` }}
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {remaining > 0
-                        ? `${remaining} more approval${remaining > 1 ? 's' : ''} needed to clear`
-                        : 'Clearing…'}
-                    </p>
+                    <BoardPanel board={board} compact />
+                    {remaining > 0 && isAwaiting && board.started && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {remaining} more CIBA yes{remaining > 1 ? 'es' : ''} to clear
+                      </p>
+                    )}
                   </div>
                 )}
 
                 {isApproved && (
-                  <div className="animate-fade-in mt-3 flex items-center gap-2 text-sm text-stone-time">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Cleared by the review team
+                  <div className="animate-fade-in mt-3 space-y-2 text-sm text-stone-time">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Cleared by the CIBA board
+                    </div>
+                    {claim.calendarEventId && (
+                      <p className="text-xs text-muted-foreground">
+                        Calendar event written on the host account.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth0, generatePolicyId, policyIdFromUser } from '@/lib/auth0'
-import { addMessage, createClaim, getLatestClaimForUser, listMessages } from '@/lib/claims'
-import { getApprovalCount } from '@/lib/claims'
+import { addMessage, createClaim, getLatestClaimForUser } from '@/lib/claims'
+import { buildClaimSnapshot } from '@/lib/snapshot'
 import type { ClaimSnapshot } from '@/lib/types'
 
 const GREETINGS = [
@@ -27,11 +27,7 @@ export async function POST() {
   const existing = await getLatestClaimForUser(userId)
 
   if (existing) {
-    const snapshot: ClaimSnapshot = {
-      claim: existing,
-      messages: await listMessages(existing.id),
-      approvalCount: await getApprovalCount(existing.id),
-    }
+    const snapshot: ClaimSnapshot = await buildClaimSnapshot(existing)
     return NextResponse.json(snapshot)
   }
 
@@ -42,10 +38,6 @@ export async function POST() {
   const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]
   await addMessage(claim.id, 'assistant', greeting)
 
-  const snapshot: ClaimSnapshot = {
-    claim,
-    messages: [{ role: 'assistant', content: greeting }],
-    approvalCount: 0,
-  }
+  const snapshot: ClaimSnapshot = await buildClaimSnapshot(claim)
   return NextResponse.json(snapshot)
 }

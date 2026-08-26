@@ -29,8 +29,8 @@ export interface ApprovalQueueItem {
 }
 
 /**
- * Public queue for the audience approver screen. Deliberately unauthenticated —
- * this is the demo's participation moment, and it exposes no user identity.
+ * Public likes ticker. Deliberately unauthenticated. A click here is
+ * atmosphere — the CIBA board is what releases the claim.
  */
 export async function GET() {
   const approverId = await readApproverId()
@@ -56,7 +56,7 @@ export async function GET() {
   return NextResponse.json({ claims: items })
 }
 
-/** Records one approval. Replaces publishing a CLAIM_APPROVAL event. */
+/** Records one like. Does not authorize the claim. */
 export async function POST(request: Request) {
   const { claimId } = (await request.json()) as { claimId?: string }
   if (!claimId) {

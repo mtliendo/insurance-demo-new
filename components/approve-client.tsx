@@ -92,13 +92,13 @@ export function ApproveClient() {
               <ShieldCheck className="h-5 w-5 text-primary" />
             </span>
             <h1 className="font-display text-3xl font-bold uppercase tracking-tight md:text-4xl">
-              Claims Review
+              Likes
             </h1>
           </div>
           <p className="mt-3 max-w-xl text-muted-foreground">
-            You&apos;re on the Hero Shield claims processing team. Review each submitted claim
-            and approve it if it looks legitimate — a claim needs{' '}
-            <span className="text-gold">three approvals</span> to go through.
+            Public likes ticker — cheer a claim from the room. This does{' '}
+            <span className="text-gold">not</span> release it. The seated CIBA board of
+            six is the grant.
           </p>
         </div>
 
@@ -129,8 +129,6 @@ export function ApproveClient() {
         <div className="space-y-5">
           {claims?.map((claim, index) => {
             const isApproved = claim.status === 'approved'
-            const remaining = claim.requiredApprovals - claim.approvalCount
-            const progress = (claim.approvalCount / claim.totalApprovers) * 100
 
             return (
               <Card
@@ -189,18 +187,15 @@ export function ApproveClient() {
                   <div>
                     <div className="mb-1.5 flex justify-between">
                       <span className="hud-readout text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
-                        Approvals
+                        Likes
                       </span>
                       <span className="hud-readout text-[0.7rem] text-[var(--stone)]">
-                        {claim.approvalCount}/{claim.totalApprovers}
+                        {claim.approvalCount}
                       </span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div className="energy-fill h-full rounded-full" style={{ width: `${progress}%` }} />
-                    </div>
-                    {!isApproved && remaining > 0 && (
+                    {!isApproved && (
                       <p className="mt-2 text-xs text-muted-foreground">
-                        {remaining} more approval{remaining > 1 ? 's' : ''} needed
+                        Atmosphere only — CIBA yeses on the host board release the claim.
                       </p>
                     )}
                   </div>
@@ -208,12 +203,12 @@ export function ApproveClient() {
                   {isApproved ? (
                     <div className="flex items-center gap-2 text-sm text-stone-time">
                       <CheckCircle2 className="h-4 w-4" />
-                      Claim approved
+                      Claim approved by the CIBA board
                     </div>
                   ) : claim.alreadyApproved ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <CheckCircle2 className="h-4 w-4 text-hud" />
-                      You approved this claim
+                      You liked this claim
                     </div>
                   ) : (
                     <Button
@@ -222,7 +217,7 @@ export function ApproveClient() {
                       size="lg"
                       className="w-full sm:w-auto"
                     >
-                      {pending === claim.claimId ? 'Approving…' : 'Approve claim'}
+                      {pending === claim.claimId ? 'Sending…' : 'Cheer this claim'}
                     </Button>
                   )}
                 </CardContent>

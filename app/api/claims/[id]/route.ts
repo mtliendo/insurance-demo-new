@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
 import { auth0 } from '@/lib/auth0'
-import { getApprovalCount, getClaim, listMessages } from '@/lib/claims'
+import { pollCibaForClaim } from '@/lib/ciba-flow'
+import { getClaim } from '@/lib/claims'
+import { isDemoHost } from '@/lib/host'
+import { buildClaimSnapshot } from '@/lib/snapshot'
 import type { ClaimSnapshot } from '@/lib/types'
 
 /**
  * The polling endpoint. Stands in for the AppSync Events subscription the Vite
  * app opened on `interviewDemo/attendee` — the client asks for the whole claim
  * snapshot on an interval instead of reacting to pushed events.
+ *
+ * Host sessions tick due CIBA auth_req_ids (stored interval, floor 5s).
+ * Audience GETs read Neon only — they must not hammer /oauth/token.
  */
 export async function GET(
   _request: Request,
@@ -18,16 +24,20 @@ export async function GET(
   }
 
   const { id } = await ctx.params
-  const claim = await getClaim(id)
+  let claim = await getClaim(id)
 
   if (!claim || claim.userId !== session.user.sub) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const snapshot: ClaimSnapshot = {
-    claim,
-    messages: await listMessages(claim.id),
-    approvalCount: await getApprovalCount(claim.id),
+  const hostPolling = isDemoHost(session.user)
+  if (
+    hostPolling &&
+    (claim.status === 'awaiting_approval' || (claim.status === 'approved' && !claim.calendarEventId))
+  ) {
+    claim = (await pollCibaForClaim(claim.id, session.user)) ?? claim
   }
+
+  const snapshot: ClaimSnapshot = await buildClaimSnapshot(claim)
   return NextResponse.json(snapshot)
 }

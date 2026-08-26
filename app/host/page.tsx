@@ -1,0 +1,27 @@
+import { redirect } from 'next/navigation'
+import { auth0 } from '@/lib/auth0'
+import { isDemoHost } from '@/lib/host'
+import { joinQrDataUrl, joinUrlFromBase } from '@/lib/qr'
+import { SiteNav } from '@/components/site-nav'
+import { HostClient } from '@/components/host-client'
+
+export const metadata = {
+  title: 'Host console — Hero Shield Insurance',
+}
+
+export default async function HostPage() {
+  const session = await auth0.getSession()
+  if (!session) redirect('/auth/login?returnTo=/host')
+  if (!isDemoHost(session.user)) redirect('/join')
+
+  const base = process.env.APP_BASE_URL ?? 'http://localhost:3000'
+  const joinUrl = joinUrlFromBase(base)
+  const qrDataUrl = await joinQrDataUrl(joinUrl)
+
+  return (
+    <>
+      <SiteNav />
+      <HostClient qrDataUrl={qrDataUrl} joinUrl={joinUrl} />
+    </>
+  )
+}

@@ -1,5 +1,9 @@
 export type ClaimStatus = 'pending' | 'awaiting_approval' | 'approved' | 'denied'
 
+export type CibaStatus = 'pending' | 'approved' | 'denied' | 'error'
+
+export type CibaBlockReason = 'no_google' | 'no_board'
+
 export interface Claim {
   id: string
   userId: string
@@ -10,6 +14,8 @@ export interface Claim {
   status: ClaimStatus
   fraudFlagged: boolean
   createdAt: string
+  calendarEventId: string | null
+  cibaBlockReason: CibaBlockReason | null
 }
 
 export interface ChatMessage {
@@ -17,13 +23,41 @@ export interface ChatMessage {
   content: string
 }
 
+export interface CibaBoardMember {
+  sub: string
+  email: string
+  name: string
+  status: CibaStatus
+  bindingMessage?: string
+  error?: string | null
+}
+
+export interface CibaBoardSnapshot {
+  members: CibaBoardMember[]
+  approvedCount: number
+  requiredApprovals: number
+  boardSize: number
+  blockReason: CibaBlockReason | null
+  calendarEventId: string | null
+  started: boolean
+}
+
 /** The claim page polls this; it replaces the AppSync Events subscription. */
 export interface ClaimSnapshot {
   claim: Claim
   messages: ChatMessage[]
+  /** Anonymous /approve ticker. Does not release the claim. */
+  likeCount: number
+  /** CIBA yeses — this is the grant. */
   approvalCount: number
+  board: CibaBoardSnapshot
+  googleConnected: boolean
 }
 
-/** Audience members who can approve, and how many must agree. */
+/** CIBA board: 6 seated, 3 yeses release the claim. */
+export const BOARD_SIZE = 6
+export const CIBA_REQUIRED_APPROVALS = 3
+
+/** Kept for the public likes ticker on /approve. Not the authorization path. */
 export const TOTAL_APPROVERS = 4
 export const REQUIRED_APPROVALS = 3

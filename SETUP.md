@@ -1,8 +1,10 @@
 # Setup
 
 Everything this app needs to run locally: **three sets of secrets** (Auth0, Neon,
-Anthropic) and **one schema migration**. Nothing else — no cloud infrastructure,
-no build step beyond `pnpm dev`.
+Anthropic), **one schema migration**, and two Auth0 add-ons the stage demo
+depends on — **CIBA email** (`requested_expiry=600`) and **Token Vault** for
+the host's Google Calendar. Nothing else — no second app, no build step beyond
+`pnpm dev`.
 
 This document is written for a coding agent working with a human who has the
 accounts. An agent can do most of this end-to-end; the two things it cannot do
@@ -63,6 +65,7 @@ Applications → Create Application → **Regular Web Application** → Settings
 
 - **Allowed Callback URLs**: `http://localhost:3000/auth/callback`
 - **Allowed Logout URLs**: `http://localhost:3000`
+- **Allowed Web Origins**: `http://localhost:3000`
 
 Then ask the human for Domain, Client ID, and Client Secret from that Settings tab.
 
@@ -104,6 +107,57 @@ Without the Action nothing breaks — [lib/auth0.ts](lib/auth0.ts) falls back to
 `AUTH0_AUDIENCE` in `.env.example` stays commented out. It is only needed if you
 want an access token for a *separate* API; this app has none.
 
+`DEMO_HOST_EMAIL` or `DEMO_HOST_SUB` is **required**. The host gate fails
+closed if both are empty — nobody can pick the board, start CIBA, or connect
+Google. Set Focus's email (and `sub` once you have it) so audience logins
+cannot operate the console. Token Vault calendar writes additionally require
+the current session `sub` to match `DEMO_HOST_SUB` when that env is set.
+
+### CIBA email grant
+
+CIBA is not on the Free plan. Enable **Client Initiated Backchannel
+Authentication** on this Regular Web App and select the **email** channel
+(not Guardian). The loop lives in [lib/ciba.ts](lib/ciba.ts), copied from
+[mtliendo/ciba-email](https://github.com/mtliendo/ciba-email) — we do **not**
+use `@auth0/ai`.
+
+Auth0 picks the channel from `requested_expiry`:
+
+- **300 seconds or less:** Guardian push
+- **301 to 259200 seconds:** email
+
+This demo always sends `requested_expiry=600`. `login_hint` is `iss_sub` (that
+board member's Auth0 `sub`), never a raw email. `binding_message` is at most
+64 characters, charset `A-Za-z0-9+-_.,:#`, no spaces
+(`Hulk-smash-claim-<id>`). The authorizing user must have a **verified**
+email or they cannot sit on the board.
+
+### Token Vault — host Google Calendar only
+
+The six board members do **not** connect Google. Only the host (Focus) does,
+once, on `/settings`.
+
+Follow the pattern in
+[mtliendo/auth0-calendar-workshop](https://github.com/mtliendo/auth0-calendar-workshop):
+
+1. Enable Token Vault on the tenant and add a **Google OAuth 2.0** connection
+   with Calendar scope.
+2. Enable that connection on this application.
+3. [lib/auth0.ts](lib/auth0.ts) sets `enableConnectAccountEndpoint: true`.
+   Login scope is `openid profile email` only — **no Google calendar
+   scope** and **no `offline_access`** on audience Universal Login. Host
+   Calendar is host-only `/auth/connect`.
+4. Host clicks **Connect Google Calendar** → `/auth/connect` (proxy-gated to
+   the host) with `scopes=https://www.googleapis.com/auth/calendar`.
+5. After three CIBA yeses the **host session** calls
+   `auth0.getAccessTokenForConnection({ connection: 'google-oauth2' })` and
+   writes Calendar REST ([lib/google-calendar.ts](lib/google-calendar.ts)).
+   A non-host poller does not write. There is no public `POST /api/calendar`.
+
+If the host has not connected Google, **CIBA is not sent**. The host console
+says so. A board yes with nowhere to write the calendar event is a hollow
+approval.
+
 ---
 
 ## 2. Neon database (use the Neon MCP server)
@@ -120,8 +174,9 @@ human to click through the console. The full sequence:
    file is idempotent (`if not exists` throughout), so re-running is safe.
 4. **`get_connection_string`** for the project's `main` branch and database
    `neondb`. Write the result into `.env.local` as `DATABASE_URL`.
-5. **`get_database_tables`** to verify. Expect three tables: `claims`,
-   `messages`, `claim_approvals`.
+5. **`get_database_tables`** to verify. Expect `claims`, `messages`,
+   `claim_approvals`, `demo_joiners`, `board_picks`, `board_members`,
+   `ciba_authorizations`.
 
 ```dotenv
 DATABASE_URL=postgresql://...@ep-....neon.tech/neondb?sslmode=require
@@ -142,7 +197,10 @@ psql "$DATABASE_URL" -f db/schema.sql
 | ----- | -------- | ---- |
 | `claims` | DynamoDB `claims` | One row per claim; `status` drives the whole demo |
 | `messages` | DynamoDB `messages` | Chat transcript, so a refresh resumes the claim |
-| `claim_approvals` | AppSync `CLAIM_APPROVAL` events | One row per audience approver |
+| `claim_approvals` | AppSync `CLAIM_APPROVAL` events | Public likes ticker — not the grant |
+| `demo_joiners` | — | QR joiners (`sub`, email, name, verified, pinned) |
+| `board_picks` / `board_members` | — | Latest pick of 6 |
+| `ciba_authorizations` | anonymous 3-of-4 | `{authReqId, sub, email, name, status}` per seat |
 
 ---
 
@@ -174,15 +232,15 @@ Then walk the happy path:
 
 1. `http://localhost:3000` → **Login** → Auth0 Universal Login. A redirect loop
    or a callback error here is almost always a mismatched Allowed Callback URL.
-2. `/profile` → your Auth0 user renders, plus the `policyId` claim (or a "Claim not set" badge).
-3. `/file-claim` → the agent greets you. Describe an incident ("the Hulk threw my
-   car across 5th Avenue, it's totaled"). The sidebar fills in when the agent
-   calls `save_claim_details` — that write is visible in Neon:
-   `select * from claims order by created_at desc limit 1`.
-4. Confirm submission → `status` flips to `awaiting_approval` and the page polls
-   every 2s.
-5. `/approve` in a second browser (or private window — one vote per cookie) →
-   approve 3 times → the claim page picks it up and fires confetti.
+2. `/settings` → **Connect Google Calendar** (host only). Without this, CIBA
+   emails are withheld.
+3. `/host` → QR is on screen. A second browser opens `/join`, logs in with a
+   **verified** email, and waits.
+4. **Pick board.** The joiner phone shows "you're on the board."
+5. `/file-claim` → describe the Hulk incident. Confirm submission. Six CIBA
+   emails go out (`requested_expiry=600`). The projector ticks as they Accept.
+6. Three yeses → claim `approved`, confetti, calendar event on the host Google
+   account. `/approve` likes do **not** release the claim.
 
 ### Troubleshooting
 
@@ -194,14 +252,22 @@ Then walk the happy path:
 | Sign-in works but every page 401s | App created as a SPA — recreate it as a Regular Web Application |
 | Agent replies "Sorry, I encountered an error" | Bad or unfunded `ANTHROPIC_API_KEY`; check the server log for `Agent error:` |
 | `relation "claims" does not exist` | Step 2's migration never ran against the branch this `DATABASE_URL` points at |
-| Approvals never release the claim | Same browser voting repeatedly — `(claim_id, approver_id)` is unique, so repeat votes are a no-op |
+| Approvals never release the claim | `/approve` likes are not the grant — need 3 CIBA yeses from the seated six |
+| Host console 503 / nobody is host | `DEMO_HOST_EMAIL` and `DEMO_HOST_SUB` are both empty — the gate fails closed |
+| CIBA emails never send | Host has not connected Google, no board picked, or `requested_expiry` is ≤300 (Guardian) |
+| Auth0 `slow_down` on stage | Polls must honor stored `interval_sec` (floor 5). Do not reset after `authorization_pending`. |
+| Board member missing from pick | Email not verified on the Auth0 user, or they are the configured host |
+| Calendar event missing after 3 yeses | Token Vault Google connection dropped; reconnect on `/settings` |
 
 ---
 
 ## Reset between demos
 
-Wipe the claims (cascades to messages and approvals) via Neon MCP `run_sql`, or:
+Wipe the claim, the room, and the board via Neon MCP `run_sql`, or:
 
 ```sql
-truncate claims cascade;
+truncate claims, demo_joiners, board_picks cascade;
 ```
+
+`ciba_authorizations`, `messages`, `claim_approvals`, and `board_members`
+cascade from those.

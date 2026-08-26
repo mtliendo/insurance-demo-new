@@ -1,6 +1,5 @@
 import { sql } from '@/lib/db'
-import type { Claim, ChatMessage, ClaimStatus } from '@/lib/types'
-import { REQUIRED_APPROVALS } from '@/lib/types'
+import type { ChatMessage, CibaBlockReason, Claim, ClaimStatus } from '@/lib/types'
 
 type ClaimRow = {
   id: string
@@ -12,6 +11,8 @@ type ClaimRow = {
   status: ClaimStatus
   fraud_flagged: boolean
   created_at: Date | string
+  calendar_event_id: string | null
+  ciba_block_reason: string | null
 }
 
 function toClaim(row: ClaimRow): Claim {
@@ -25,6 +26,11 @@ function toClaim(row: ClaimRow): Claim {
     status: row.status,
     fraudFlagged: row.fraud_flagged,
     createdAt: new Date(row.created_at).toISOString(),
+    calendarEventId: row.calendar_event_id,
+    cibaBlockReason:
+      row.ciba_block_reason === 'no_google' || row.ciba_block_reason === 'no_board'
+        ? row.ciba_block_reason
+        : null,
   }
 }
 
@@ -129,9 +135,9 @@ export async function getApprovalCount(claimId: string): Promise<number> {
 }
 
 /**
- * Records one audience approval and promotes the claim once enough have landed.
- * Replaces the CLAIM_APPROVAL events the frontend used to count client-side.
- * The unique (claim_id, approver_id) constraint makes repeat votes a no-op.
+ * Records one anonymous "like" on /approve. This is a ticker, not the grant —
+ * CIBA board yeses are what release the claim.
+ * The unique (claim_id, approver_id) constraint makes repeat clicks a no-op.
  */
 export async function recordApproval(
   claimId: string,
@@ -143,16 +149,50 @@ export async function recordApproval(
     on conflict (claim_id, approver_id) do nothing
   `
 
-  const count = await getApprovalCount(claimId)
+  return getApprovalCount(claimId)
+}
 
-  if (count >= REQUIRED_APPROVALS) {
-    await sql`
-      update claims set status = 'approved', updated_at = now()
-      where id = ${claimId} and status = 'awaiting_approval'
-    `
-  }
+export async function setCibaBlockReason(
+  claimId: string,
+  reason: CibaBlockReason | null,
+): Promise<void> {
+  await sql`
+    update claims
+    set ciba_block_reason = ${reason}, updated_at = now()
+    where id = ${claimId}
+  `
+}
 
-  return count
+export async function approveClaim(claimId: string): Promise<boolean> {
+  const rows = (await sql`
+    update claims set status = 'approved', updated_at = now()
+    where id = ${claimId} and status = 'awaiting_approval'
+    returning id
+  `) as { id: string }[]
+  return rows.length > 0
+}
+
+export async function attachCalendarEvent(
+  claimId: string,
+  eventId: string,
+): Promise<boolean> {
+  const rows = (await sql`
+    update claims
+    set calendar_event_id = ${eventId}, updated_at = now()
+    where id = ${claimId} and calendar_event_id is null
+    returning id
+  `) as { id: string }[]
+  return rows.length > 0
+}
+
+export async function getLatestSubmittedClaim(): Promise<Claim | null> {
+  const rows = (await sql`
+    select * from claims
+    where status in ('awaiting_approval', 'approved')
+    order by created_at desc
+    limit 1
+  `) as ClaimRow[]
+  return rows[0] ? toClaim(rows[0]) : null
 }
 
 export async function hasApproved(claimId: string, approverId: string): Promise<boolean> {
