@@ -86,12 +86,7 @@ export function JoinClient({
     }
 
     void tick()
-    const timer = setInterval(() => {
-      if (!seated) return
-      void read().catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : 'Join failed')
-      })
-    }, POLL_MS)
+    const timer = setInterval(() => void tick(), POLL_MS)
     return () => {
       active = false
       clearInterval(timer)
