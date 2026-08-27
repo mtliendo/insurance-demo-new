@@ -54,9 +54,14 @@ export interface ClaimSnapshot {
   googleConnected: boolean
 }
 
-/** CIBA board: 6 seated, 3 yeses release the claim. */
-export const BOARD_SIZE = 6
-export const CIBA_REQUIRED_APPROVALS = 3
+/**
+ * Stage defaults for the CIBA board. Live size and yes-threshold are
+ * env-driven (`BOARD_SIZE`, `CIBA_YES_THRESHOLD`) via lib/board-config.ts.
+ * Clients must read the values from the API / claim snapshot — do not
+ * import process.env here (this module is shared with client components).
+ */
+export const DEFAULT_BOARD_SIZE = 6
+export const DEFAULT_CIBA_YES_THRESHOLD = 3
 
 /** Kept for the public likes ticker on /approve. Not the authorization path. */
 export const TOTAL_APPROVERS = 4

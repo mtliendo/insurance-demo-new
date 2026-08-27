@@ -5,8 +5,8 @@ import { hasLiveCiba } from '@/lib/ciba-store'
 import { pollCibaForClaim } from '@/lib/ciba-flow'
 import { getLatestSubmittedClaim } from '@/lib/claims'
 import { isGoogleConnected } from '@/lib/google'
+import { getBoardSize, getCibaYesThreshold } from '@/lib/board-config'
 import { getCibaBoardSnapshot } from '@/lib/snapshot'
-import { BOARD_SIZE } from '@/lib/types'
 
 export async function GET() {
   const auth = await requireHostSession()
@@ -27,7 +27,8 @@ export async function GET() {
   return NextResponse.json({
     joiners,
     board,
-    boardSize: BOARD_SIZE,
+    boardSize: getBoardSize(),
+    yesThreshold: getCibaYesThreshold(),
     verifiedCount: eligibleJoiners(joiners).length,
     canPick: !liveCiba,
     googleConnected,

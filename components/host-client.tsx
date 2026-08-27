@@ -8,7 +8,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import type { CibaBoardSnapshot } from '@/lib/types'
+import {
+  DEFAULT_BOARD_SIZE,
+  DEFAULT_CIBA_YES_THRESHOLD,
+  type CibaBoardSnapshot,
+} from '@/lib/types'
 
 type Joiner = {
   sub: string
@@ -22,6 +26,7 @@ type BoardState = {
   joiners: Joiner[]
   board: { sub: string; email: string; name: string }[]
   boardSize: number
+  yesThreshold: number
   verifiedCount: number
   canPick: boolean
   googleConnected: boolean
@@ -113,12 +118,14 @@ export function HostClient({
     }
   }
 
-  const boardSize = state?.boardSize ?? 6
+  const boardSize = state?.boardSize ?? DEFAULT_BOARD_SIZE
+  const yesThreshold = state?.yesThreshold ?? DEFAULT_CIBA_YES_THRESHOLD
   const verified = state?.joiners.filter((j) => j.emailVerified) ?? []
   const unverified = state?.joiners.filter((j) => !j.emailVerified) ?? []
   const verifiedCount = state?.verifiedCount ?? verified.length
   const enoughVerified = verifiedCount >= boardSize
   const pickEnabled = Boolean(state?.canPick) && enoughVerified && !picking
+  const fullBoard = (state?.board.length ?? 0) === boardSize
   const blockReason = state?.claim?.board.blockReason
   const needsCibaStart =
     state?.claim?.status === 'awaiting_approval' &&
@@ -136,8 +143,9 @@ export function HostClient({
               CIBA board
             </h1>
             <p className="mt-2 max-w-xl text-muted-foreground">
-              One QR for the room. Pick six. File the Hulk claim. Three email yeses
-              release it and write your calendar.
+              One QR for the room. Pick {boardSize}. File the Hulk claim.{' '}
+              {yesThreshold} email yes{yesThreshold === 1 ? '' : 'es'} release it
+              and write your calendar.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -249,7 +257,8 @@ export function HostClient({
                 {state && !enoughVerified && (
                   <p className="text-xs text-gold">
                     Need {boardSize} verified joiners before you can pick. A short
-                    board can never hit three CIBA yeses.
+                    board can never hit {yesThreshold} CIBA yes
+                    {yesThreshold === 1 ? '' : 'es'}.
                   </p>
                 )}
                 {state?.canPick === false && (
@@ -286,16 +295,17 @@ export function HostClient({
               <CardContent className="space-y-4 pt-5">
                 {blockReason === 'no_google' && (
                   <p className="text-sm text-gold">
-                    Claim is waiting. Connect Google, then send the six CIBA emails.
+                    Claim is waiting. Connect Google, then send the {boardSize} CIBA
+                    emails.
                   </p>
                 )}
                 {blockReason === 'no_board' && (
                   <p className="text-sm text-gold">
-                    Claim is waiting. Pick a board of six, then send CIBA.
+                    Claim is waiting. Pick a board of {boardSize}, then send CIBA.
                   </p>
                 )}
                 {(blockReason || needsCibaStart) && state?.googleConnected && (
-                  <Button onClick={() => void startCiba()} disabled={starting || !state.board.length}>
+                  <Button onClick={() => void startCiba()} disabled={starting || !fullBoard}>
                     {starting ? 'Sending…' : 'Send CIBA emails'}
                   </Button>
                 )}
@@ -309,7 +319,7 @@ export function HostClient({
                         status: 'pending',
                       })),
                       approvedCount: 0,
-                      requiredApprovals: 3,
+                      requiredApprovals: yesThreshold,
                       boardSize: state.boardSize,
                       blockReason: null,
                       calendarEventId: null,
@@ -317,7 +327,9 @@ export function HostClient({
                     }}
                   />
                 ) : (
-                  <p className="text-sm text-muted-foreground">Pick a board to seat six names.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Pick a board to seat {boardSize} names.
+                  </p>
                 )}
               </CardContent>
             </Card>

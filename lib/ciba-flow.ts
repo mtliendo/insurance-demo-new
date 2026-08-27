@@ -20,8 +20,8 @@ import {
 import { createEvent } from '@/lib/google-calendar'
 import { getGoogleAccessToken, isGoogleConnected } from '@/lib/google'
 import { auth0 } from '@/lib/auth0'
+import { getCibaYesThreshold, isFullBoard } from '@/lib/board-config'
 import { canWriteHostCalendar, isDemoHost } from '@/lib/host'
-import { CIBA_REQUIRED_APPROVALS } from '@/lib/types'
 import type { Claim } from '@/lib/types'
 
 export type CibaStartResult =
@@ -31,9 +31,10 @@ export type CibaStartResult =
 type SessionUser = { sub?: string; email?: string | null }
 
 /**
- * When a claim flips to awaiting_approval, email the seated 6 — not the
- * whole room. Refuses to send if the host has not connected Google
- * (hollow approval otherwise) or if no board has been picked.
+ * When a claim flips to awaiting_approval, email the seated board — not
+ * the whole room. Refuses to send if the host has not connected Google
+ * (hollow approval otherwise) or if the seated board is not exactly
+ * BOARD_SIZE (empty or leftover short pick).
  */
 export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaStartResult> {
   if (await hasCibaStarted(claimId)) {
@@ -51,7 +52,7 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
   }
 
   const board = await getCurrentBoard()
-  if (board.length === 0) {
+  if (!isFullBoard(board.length)) {
     await setCibaBlockReason(claimId, 'no_board')
     return { ok: false, reason: 'no_board' }
   }
@@ -97,9 +98,10 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
 }
 
 /**
- * Poll due pending auth_req_ids only. Three yeses release the claim,
- * then write one event on the host's Google Calendar via Token Vault —
- * and only if this session is the configured host.
+ * Poll due pending auth_req_ids only. CIBA_YES_THRESHOLD yeses
+ * (stage default 3) release the claim, then write one event on the
+ * host's Google Calendar via Token Vault — and only if this session
+ * is the configured host.
  */
 export async function pollCibaForClaim(
   claimId: string,
@@ -127,7 +129,7 @@ export async function pollCibaForClaim(
   }
 
   const approved = await countCibaApproved(claimId)
-  if (approved >= CIBA_REQUIRED_APPROVALS) {
+  if (approved >= getCibaYesThreshold()) {
     await approveClaim(claimId)
     if (canWriteHostCalendar(actor)) {
       await writeHostCalendarEvent(claimId)

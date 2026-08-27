@@ -90,7 +90,7 @@ are the SQL surface.
 | ----- | ---- | ------- |
 | `/` | public | Marketing landing page |
 | `/join` | login | QR landing — join the room, see board seat |
-| `/host` | host | QR, pick 6, projector CIBA board |
+| `/host` | host | QR, pick board (`BOARD_SIZE`, default 6), projector CIBA board |
 | `/settings` | host | Connect Google Calendar (Token Vault) |
 | `/file-claim` | protected | Chat with the claims agent; live board sidebar |
 | `/profile` | protected | Auth0 profile and the `policyId` custom claim |
@@ -100,7 +100,7 @@ are the SQL surface.
 | `POST /api/claims/[id]/chat` | protected | One agent turn |
 | `GET \| POST /api/join` | login | Upsert joiner; seat / CIBA status for this phone |
 | `GET /api/board` | host | Joiners + live board + CIBA snapshot |
-| `POST /api/board/pick` | host | Randomly seat 6 (pins first) |
+| `POST /api/board/pick` | host | Randomly seat `BOARD_SIZE` (pins first; default 6) |
 | `GET \| POST /api/ciba` | host | Board status; manual start if Google/board lagged |
 | `POST /api/ciba/poll` | host | Tick due `/oauth/token` per `auth_req_id` |
 | `GET /api/connection-status` | host | Token Vault Google connected? |
@@ -113,7 +113,8 @@ app/            pages + route handlers
 components/     client components (chat, join, host, board) + shadcn/ui
 lib/agent/      system prompt, tool definitions, the tool loop
 lib/ciba.ts     /bc-authorize + CIBA token poll (not @auth0/ai)
-lib/board.ts    joiners + pick-6
+lib/board.ts    joiners + pick (`BOARD_SIZE`)
+lib/board-config.ts  BOARD_SIZE / CIBA_YES_THRESHOLD (defaults 6 / 3)
 lib/claims.ts   claim SQL
 lib/auth0.ts    Auth0 client, Token Vault connect-account
 db/schema.sql   claims / messages / likes / joiners / board / ciba
@@ -153,6 +154,23 @@ pnpm lint
 ```
 
 Full environment and database setup: **[SETUP.md](SETUP.md)**.
+
+## Rehearsal mode (no six Auth0 accounts)
+
+Stage defaults stay **pick 6 / 3 yeses**. To run the Oktane CIBA board with two
+verified joiners — both must Accept — set these in `.env.local` and restart
+`pnpm dev`:
+
+```dotenv
+BOARD_SIZE=2
+CIBA_YES_THRESHOLD=2
+```
+
+Do not change the stage demo to 2. The host console shows `N/{BOARD_SIZE}` and
+Pick stays disabled until verified (non-host) joiners reach that size. CIBA
+start refuses a seated board that is not exactly `BOARD_SIZE`. The host Token
+Vault calendar write and `claim.status = approved` fire only after yeses reach
+`CIBA_YES_THRESHOLD`.
 
 ## Running the demo on stage
 

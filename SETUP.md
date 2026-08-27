@@ -113,6 +113,24 @@ Google. Set Focus's email (and `sub` once you have it) so audience logins
 cannot operate the console. Token Vault calendar writes additionally require
 the current session `sub` to match `DEMO_HOST_SUB` when that env is set.
 
+### Board size and CIBA yes threshold
+
+Stage defaults stay **pick 6 / 3 yeses**. Both are env-driven so Focus can
+rehearse the Oktane board without six Auth0 accounts:
+
+```dotenv
+BOARD_SIZE=6
+CIBA_YES_THRESHOLD=3
+```
+
+Rehearsal: `BOARD_SIZE=2` and `CIBA_YES_THRESHOLD=2` (both seated members must
+CIBA-yes). Do not hardcode the stage demo to 2. Restart the dev server after
+editing `.env.local`. The host console shows `N/{BOARD_SIZE}` and disables Pick
+until verified (non-host) joiners ≥ `BOARD_SIZE`. `POST /api/board/pick` rejects
+a short room. CIBA start refuses a seated board that is not exactly
+`BOARD_SIZE`. Calendar write and `claim.status = approved` fire only after
+yeses ≥ `CIBA_YES_THRESHOLD`.
+
 ### CIBA email grant
 
 CIBA is not on the Free plan. Enable **Client Initiated Backchannel
@@ -252,7 +270,7 @@ Then walk the happy path:
 | Sign-in works but every page 401s | App created as a SPA — recreate it as a Regular Web Application |
 | Agent replies "Sorry, I encountered an error" | Bad or unfunded `ANTHROPIC_API_KEY`; check the server log for `Agent error:` |
 | `relation "claims" does not exist` | Step 2's migration never ran against the branch this `DATABASE_URL` points at |
-| Approvals never release the claim | `/approve` likes are not the grant — need 3 CIBA yeses from the seated six |
+| Approvals never release the claim | `/approve` likes are not the grant — need `CIBA_YES_THRESHOLD` yeses (default 3) from the seated `BOARD_SIZE` (default 6) |
 | Host console 503 / nobody is host | `DEMO_HOST_EMAIL` and `DEMO_HOST_SUB` are both empty — the gate fails closed |
 | CIBA emails never send | Host has not connected Google, no board picked, or `requested_expiry` is ≤300 (Guardian) |
 | Auth0 `slow_down` on stage | Polls must honor stored `interval_sec` (floor 5). Do not reset after `authorization_pending`. |
