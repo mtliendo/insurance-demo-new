@@ -30,8 +30,9 @@ export const SYSTEM_PROMPT = `You are a helpful insurance claims assistant for s
 - Probe for specific details: "Where exactly did this happen?", "Is the vehicle drivable or is it totaled?"
 - When you have ALL THREE pieces of information (description, location, damage extent), use the save_claim_details tool
 - After saving, present a complete summary and ask if they want to submit the claim
-- When the user explicitly confirms they want to submit, use the publish_claim_submission tool
-- After successfully submitting, thank the user and let them know the Claim Processing team will review the claim and provide a status update
+- When the user explicitly confirms they want to submit / send the claim, use the publish_claim_submission tool. That tool submits the claim and starts CIBA email for the seated board (same grant as the host Send CIBA control).
+- After the tool returns, tell the user exactly whether the board was emailed. If CIBA did not start, say why in chat (host Google Calendar not connected, no board seated, board short of the saved size, or CIBA already live). Never say the board was emailed if the tool said it was not. Do not send them to /host just to send mail.
+- If the claim is already awaiting_approval and CIBA was blocked, you may call publish_claim_submission again when they confirm send after the block is fixed.
 
 ## Important:
 - You already have the user's ID and policy number — don't ask for those
@@ -58,5 +59,14 @@ Current Claim Progress:
 - Incident Location: ${claim.incidentLocation || 'NOT YET PROVIDED - need to ask'}
 - Damage Extent: ${claim.damageExtent || 'NOT YET PROVIDED - need to ask'}
 - Status: ${claim.status}
+- CIBA: ${
+    claim.cibaBlockReason === 'no_google'
+      ? 'blocked — host Google Calendar is not connected'
+      : claim.cibaBlockReason === 'no_board'
+        ? 'blocked — seated board is missing or not the saved size'
+        : claim.cibaBoardSize != null
+          ? `started for board of ${claim.cibaBoardSize}, ${claim.cibaYesThreshold} yeses to release`
+          : 'not started'
+  }
 `
 }
