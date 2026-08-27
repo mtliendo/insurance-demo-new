@@ -1,3 +1,4 @@
+import { ensureBoardRulesSchema } from '@/lib/board-config'
 import { sql } from '@/lib/db'
 import type { ChatMessage, CibaBlockReason, Claim, ClaimStatus } from '@/lib/types'
 
@@ -13,6 +14,8 @@ type ClaimRow = {
   created_at: Date | string
   calendar_event_id: string | null
   ciba_block_reason: string | null
+  ciba_board_size: number | null
+  ciba_yes_threshold: number | null
 }
 
 function toClaim(row: ClaimRow): Claim {
@@ -31,10 +34,15 @@ function toClaim(row: ClaimRow): Claim {
       row.ciba_block_reason === 'no_google' || row.ciba_block_reason === 'no_board'
         ? row.ciba_block_reason
         : null,
+    cibaBoardSize:
+      row.ciba_board_size == null ? null : Number(row.ciba_board_size),
+    cibaYesThreshold:
+      row.ciba_yes_threshold == null ? null : Number(row.ciba_yes_threshold),
   }
 }
 
 export async function createClaim(userId: string, policyId: string): Promise<Claim> {
+  await ensureBoardRulesSchema()
   const rows = (await sql`
     insert into claims (user_id, policy_id)
     values (${userId}, ${policyId})
@@ -44,12 +52,14 @@ export async function createClaim(userId: string, policyId: string): Promise<Cla
 }
 
 export async function getClaim(id: string): Promise<Claim | null> {
+  await ensureBoardRulesSchema()
   const rows = (await sql`select * from claims where id = ${id}`) as ClaimRow[]
   return rows[0] ? toClaim(rows[0]) : null
 }
 
 /** Most recent claim for a user — lets the file-claim page resume instead of restarting. */
 export async function getLatestClaimForUser(userId: string): Promise<Claim | null> {
+  await ensureBoardRulesSchema()
   const rows = (await sql`
     select * from claims
     where user_id = ${userId} and status <> 'approved'
@@ -163,10 +173,17 @@ export async function setCibaBlockReason(
   `
 }
 
+/**
+ * Release the claim. Callers must have already checked CIBA yeses
+ * against the pair frozen on this row — not live demo_settings.
+ */
 export async function approveClaim(claimId: string): Promise<boolean> {
+  await ensureBoardRulesSchema()
   const rows = (await sql`
     update claims set status = 'approved', updated_at = now()
-    where id = ${claimId} and status = 'awaiting_approval'
+    where id = ${claimId}
+      and status = 'awaiting_approval'
+      and ciba_yes_threshold is not null
     returning id
   `) as { id: string }[]
   return rows.length > 0
@@ -186,6 +203,7 @@ export async function attachCalendarEvent(
 }
 
 export async function getLatestSubmittedClaim(): Promise<Claim | null> {
+  await ensureBoardRulesSchema()
   const rows = (await sql`
     select * from claims
     where status in ('awaiting_approval', 'approved')

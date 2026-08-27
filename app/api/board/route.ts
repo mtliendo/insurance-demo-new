@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 import { requireHostSession } from '@/lib/api-auth'
 import { eligibleJoiners, getCurrentBoard, listJoiners } from '@/lib/board'
-import { hasLiveCiba } from '@/lib/ciba-store'
 import { pollCibaForClaim } from '@/lib/ciba-flow'
 import { getLatestSubmittedClaim } from '@/lib/claims'
 import { isGoogleConnected } from '@/lib/google'
-import { getBoardSettings } from '@/lib/board-config'
+import { getBoardSettings, hasCibaCatchUpLock, isCibaCatchUpWindow } from '@/lib/board-config'
 import { getCibaBoardSnapshot } from '@/lib/snapshot'
 
 export async function GET() {
@@ -13,15 +12,15 @@ export async function GET() {
   if ('error' in auth) return auth.error
 
   let claim = await getLatestSubmittedClaim()
-  if (claim && (claim.status === 'awaiting_approval' || (claim.status === 'approved' && !claim.calendarEventId))) {
+  if (claim && isCibaCatchUpWindow(claim)) {
     claim = (await pollCibaForClaim(claim.id, auth.session.user)) ?? claim
   }
 
-  const [joiners, board, googleConnected, liveCiba, settings] = await Promise.all([
+  const [joiners, board, googleConnected, rulesLocked, settings] = await Promise.all([
     listJoiners(),
     getCurrentBoard(),
     isGoogleConnected(),
-    hasLiveCiba(),
+    hasCibaCatchUpLock(),
     getBoardSettings(),
   ])
 
@@ -31,7 +30,7 @@ export async function GET() {
     boardSize: settings.boardSize,
     yesThreshold: settings.yesThreshold,
     verifiedCount: eligibleJoiners(joiners).length,
-    canPick: !liveCiba,
+    canPick: !rulesLocked,
     googleConnected,
     claim: claim
       ? {

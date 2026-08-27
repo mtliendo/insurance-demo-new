@@ -166,9 +166,11 @@ then Save. Do not hardcode the stage demo to 2.
 
 The host console shows `N/{size}` and Pick stays disabled until verified
 (non-host) joiners reach that size. CIBA start refuses a seated board that is
-not exactly the saved size. The host Token Vault calendar write and
-`claim.status = approved` fire only after yeses reach the saved threshold.
-Impossible pairs (threshold 3 with size 2) are rejected.
+not exactly the saved size, and freezes that pair on the claim. Poll,
+snapshot, approve, and the host calendar write use the frozen pair — not a
+later `/host` save. Board rules stay locked while a claim is
+`awaiting_approval` or `approved` without a calendar event. Impossible pairs
+(threshold 3 with size 2) are rejected.
 
 ## Running the demo on stage
 

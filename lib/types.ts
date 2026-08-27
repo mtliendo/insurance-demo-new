@@ -16,6 +16,9 @@ export interface Claim {
   createdAt: string
   calendarEventId: string | null
   cibaBlockReason: CibaBlockReason | null
+  /** Frozen at CIBA start. Null until emails go out. */
+  cibaBoardSize: number | null
+  cibaYesThreshold: number | null
 }
 
 export interface ChatMessage {

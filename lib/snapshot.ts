@@ -1,12 +1,12 @@
 import { getCurrentBoard } from '@/lib/board'
-import { getBoardSettings } from '@/lib/board-config'
+import { boardRulesForClaim } from '@/lib/board-config'
 import { listCibaForClaim, toCibaMember } from '@/lib/ciba-store'
 import { getApprovalCount, listMessages } from '@/lib/claims'
 import { isGoogleConnected } from '@/lib/google'
 import type { CibaBoardSnapshot, Claim, ClaimSnapshot } from '@/lib/types'
 
 export async function getCibaBoardSnapshot(claim: Claim): Promise<CibaBoardSnapshot> {
-  const { boardSize, yesThreshold } = await getBoardSettings()
+  const { boardSize, yesThreshold } = await boardRulesForClaim(claim)
   const rows = await listCibaForClaim(claim.id)
   if (rows.length > 0) {
     const members = rows.map(toCibaMember)

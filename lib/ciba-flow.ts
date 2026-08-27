@@ -20,7 +20,12 @@ import {
 import { createEvent } from '@/lib/google-calendar'
 import { getGoogleAccessToken, isGoogleConnected } from '@/lib/google'
 import { auth0 } from '@/lib/auth0'
-import { getBoardSettings, isFullBoard } from '@/lib/board-config'
+import {
+  freezeCibaBoardRules,
+  frozenBoardRules,
+  getBoardSettings,
+  isFullBoard,
+} from '@/lib/board-config'
 import { canWriteHostCalendar, isDemoHost } from '@/lib/host'
 import type { Claim } from '@/lib/types'
 
@@ -51,9 +56,19 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
     return { ok: false, reason: 'no_google' }
   }
 
-  const { boardSize } = await getBoardSettings()
+  const claim = await getClaim(claimId)
+  if (!claim) return { ok: false, reason: 'no_board' }
+
+  const live = await getBoardSettings()
+  const intended = frozenBoardRules(claim) ?? live
   const board = await getCurrentBoard()
-  if (!isFullBoard(board.length, boardSize)) {
+  if (!isFullBoard(board.length, intended.boardSize)) {
+    await setCibaBlockReason(claimId, 'no_board')
+    return { ok: false, reason: 'no_board' }
+  }
+
+  const frozen = await freezeCibaBoardRules(claimId, intended)
+  if (!isFullBoard(board.length, frozen.boardSize)) {
     await setCibaBlockReason(claimId, 'no_board')
     return { ok: false, reason: 'no_board' }
   }
@@ -99,10 +114,10 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
 }
 
 /**
- * Poll due pending auth_req_ids only. The host-saved yes threshold
- * (stage default 3) releases the claim, then write one event on the
- * host's Google Calendar via Token Vault — and only if this session
- * is the configured host.
+ * Poll due pending auth_req_ids only. The yes threshold frozen on the
+ * claim at CIBA start releases it, then write one event on the host's
+ * Google Calendar via Token Vault — and only if this session is the
+ * configured host. Live demo_settings must not change that pair.
  */
 export async function pollCibaForClaim(
   claimId: string,
@@ -129,9 +144,19 @@ export async function pollCibaForClaim(
     })
   }
 
+  const claim = await getClaim(claimId)
+  if (!claim) return null
+
+  let rules = frozenBoardRules(claim)
+  if (!rules && (await hasCibaStarted(claimId))) {
+    rules = await freezeCibaBoardRules(claimId, await getBoardSettings())
+  }
+  if (!rules) {
+    return getClaim(claimId)
+  }
+
   const approved = await countCibaApproved(claimId)
-  const { yesThreshold } = await getBoardSettings()
-  if (approved >= yesThreshold) {
+  if (approved >= rules.yesThreshold) {
     await approveClaim(claimId)
     if (canWriteHostCalendar(actor)) {
       await writeHostCalendarEvent(claimId)

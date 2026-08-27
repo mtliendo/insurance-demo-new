@@ -125,3 +125,6 @@ alter table ciba_authorizations add column if not exists last_polled_at timestam
 -- Google connect, or no board of 6).
 alter table claims add column if not exists calendar_event_id text;
 alter table claims add column if not exists ciba_block_reason text;
+-- Frozen at CIBA start so a later /host save cannot change the grant.
+alter table claims add column if not exists ciba_board_size integer;
+alter table claims add column if not exists ciba_yes_threshold integer;

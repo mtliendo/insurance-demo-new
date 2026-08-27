@@ -299,7 +299,8 @@ export function HostClient({
                 )}
                 {state?.canPick === false && (
                   <p className="text-xs text-gold">
-                    CIBA is live. Reset the claim before changing board rules.
+                    A claim is in CIBA or waiting on the calendar write. Reset it
+                    before changing board rules.
                   </p>
                 )}
                 <Button
@@ -365,7 +366,8 @@ export function HostClient({
                 )}
                 {state?.canPick === false && (
                   <p className="text-xs text-gold">
-                    CIBA is live for a claim. Reset the claim before picking again.
+                    A claim is in CIBA or waiting on the calendar write. Reset it
+                    before picking again.
                   </p>
                 )}
               </CardContent>

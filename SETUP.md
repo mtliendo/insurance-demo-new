@@ -208,7 +208,7 @@ psql "$DATABASE_URL" -f db/schema.sql
 
 | Table | Replaces | Role |
 | ----- | -------- | ---- |
-| `claims` | DynamoDB `claims` | One row per claim; `status` drives the whole demo |
+| `claims` | DynamoDB `claims` | One row per claim; `status` drives the whole demo. CIBA start freezes `ciba_board_size` / `ciba_yes_threshold`. |
 | `messages` | DynamoDB `messages` | Chat transcript, so a refresh resumes the claim |
 | `claim_approvals` | AppSync `CLAIM_APPROVAL` events | Public likes ticker — not the grant |
 | `demo_joiners` | — | QR joiners (`sub`, email, name, verified, pinned) |
