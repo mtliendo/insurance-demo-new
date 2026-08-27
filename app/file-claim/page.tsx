@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { auth0 } from '@/lib/auth0'
+import { isDemoHost } from '@/lib/host'
 import { SiteNav } from '@/components/site-nav'
 import { FileClaimClient } from '@/components/file-claim-client'
 
@@ -11,7 +12,10 @@ export default async function FileClaimPage() {
   return (
     <>
       <SiteNav />
-      <FileClaimClient userLabel={session.user.name ?? session.user.email ?? 'there'} />
+      <FileClaimClient
+        userLabel={session.user.name ?? session.user.email ?? 'there'}
+        isHost={isDemoHost(session.user)}
+      />
     </>
   )
 }

@@ -96,6 +96,7 @@ are the SQL surface.
 | `/profile` | protected | Auth0 profile and the `policyId` custom claim |
 | `/approve` | public | Likes ticker — not the authorization path |
 | `POST /api/claims` | protected | Starts or resumes the caller's claim |
+| `POST /api/claims/reset` | host | Wipe in-flight claim + chat / CIBA / likes |
 | `GET /api/claims/[id]` | protected | Claim snapshot; host ticks due CIBA ids |
 | `POST /api/claims/[id]/chat` | protected | One agent turn |
 | `GET \| POST /api/join` | login | Upsert joiner; seat / CIBA status for this phone |
@@ -184,5 +185,7 @@ later `/host` save. Board rules stay locked while a claim is
 6. Three yeses approve the claim, confetti fires, and a calendar event lands
    on the host Google account.
 
-Between runs, reset with `truncate claims, demo_joiners, board_picks cascade;`
-(see the end of [SETUP.md](SETUP.md)).
+Between runs, Focus taps **Start over** on `/file-claim` or `/host` (host
+only — keeps the room, board, and Google). A full wipe of joiners and the
+board is still `truncate claims, demo_joiners, board_picks cascade;` (see
+the end of [SETUP.md](SETUP.md)).

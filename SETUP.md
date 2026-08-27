@@ -277,11 +277,19 @@ Then walk the happy path:
 
 ## Reset between demos
 
-Wipe the claim, the room, and the board via Neon MCP `run_sql`, or:
+**Start over (host only).** On `/file-claim` or `/host`, Focus taps **Start
+over** and confirms. That deletes the in-flight claim — `awaiting_approval`
+or `approved` without a calendar event, plus the host's latest unapproved
+chat — and cascades its `messages`, `ciba_authorizations`, and
+`claim_approvals`. Joiners, the seated board, `demo_settings`, Token Vault /
+Google, and Auth0 users stay. Audience, joiners, and the seated board cannot
+call this; `POST /api/claims/reset` is host-gated.
+
+**Full room wipe** (joiners and board too) via Neon MCP `run_sql`, or:
 
 ```sql
 truncate claims, demo_joiners, board_picks cascade;
 ```
 
 `ciba_authorizations`, `messages`, `claim_approvals`, and `board_members`
-cascade from those.
+cascade from those. Do not expose a public clear to non-hosts.

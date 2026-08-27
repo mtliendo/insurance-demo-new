@@ -9,7 +9,7 @@ export async function POST() {
 
   if (await hasCibaCatchUpLock()) {
     return NextResponse.json(
-      { error: 'A claim is in CIBA or waiting on the calendar write. Reset it before picking again.' },
+      { error: 'A claim is in CIBA or waiting on the calendar write. Start over before picking again.' },
       { status: 409 },
     )
   }
