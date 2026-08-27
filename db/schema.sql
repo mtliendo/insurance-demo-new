@@ -21,7 +21,7 @@ create table if not exists claims (
 -- Mirrors the DynamoDB `byPolicyId` GSI.
 create index if not exists claims_policy_id_created_at_idx on claims (policy_id, created_at desc);
 create index if not exists claims_user_id_created_at_idx   on claims (user_id, created_at desc);
--- Drives the public approver queue.
+-- Latest submitted claim for the host projector.
 create index if not exists claims_status_created_at_idx    on claims (status, created_at desc);
 
 create table if not exists messages (
@@ -35,7 +35,7 @@ create table if not exists messages (
 -- Mirrors the DynamoDB `claimIdIndex` GSI.
 create index if not exists messages_claim_id_created_at_idx on messages (claim_id, created_at);
 
--- Replaces the AppSync CLAIM_APPROVAL events. One row per audience approver.
+-- Leftover audience-likes table. Unused; rows cascade when a claim is deleted.
 create table if not exists claim_approvals (
   id          bigserial   primary key,
   claim_id    uuid        not null references claims (id) on delete cascade,
@@ -62,20 +62,31 @@ create table if not exists demo_joiners (
 create index if not exists demo_joiners_joined_at_idx on demo_joiners (joined_at desc);
 
 -- Host-set board size and CIBA yes threshold. Singleton row.
--- Stage default is 6 / 3; Focus sets 2 / 2 on /host for rehearsal.
+-- Code default is 1 / 1; Focus raises to 6 / 3 on /host for the talk.
+-- defaults_version rewrites an existing row to 1/1 once so a live DB
+-- does not keep the old 6/3 seed on first load.
 create table if not exists demo_settings (
   singleton     boolean     primary key default true check (singleton),
-  board_size    integer     not null default 6
+  board_size    integer     not null default 1
                   check (board_size >= 1 and board_size <= 24),
-  yes_threshold integer     not null default 3
+  yes_threshold integer     not null default 1
                   check (yes_threshold >= 1 and yes_threshold <= board_size),
+  defaults_version integer  not null default 2,
   updated_at    timestamptz not null default now(),
   updated_by    text
 );
 
-insert into demo_settings (singleton, board_size, yes_threshold)
-values (true, 6, 3)
+alter table demo_settings add column if not exists defaults_version integer not null default 1;
+alter table demo_settings alter column board_size set default 1;
+alter table demo_settings alter column yes_threshold set default 1;
+
+insert into demo_settings (singleton, board_size, yes_threshold, defaults_version)
+values (true, 1, 1, 2)
 on conflict (singleton) do nothing;
+
+update demo_settings
+set board_size = 1, yes_threshold = 1, defaults_version = 2, updated_at = now()
+where singleton = true and defaults_version < 2;
 
 -- One row per "Pick board" tap. The latest pick is the live board.
 create table if not exists board_picks (

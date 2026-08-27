@@ -259,8 +259,10 @@ export function HostClient({
                   Board rules
                 </CardTitle>
                 <CardDescription>
-                  Stage default is {DEFAULT_BOARD_SIZE} seats / {DEFAULT_CIBA_YES_THRESHOLD}{' '}
-                  yeses. Set 2 and 2 to rehearse without six Auth0 accounts.
+                  Default is {DEFAULT_BOARD_SIZE} seat
+                  {DEFAULT_BOARD_SIZE === 1 ? '' : 's'} / {DEFAULT_CIBA_YES_THRESHOLD}{' '}
+                  yes{DEFAULT_CIBA_YES_THRESHOLD === 1 ? '' : 'es'}. Raise to
+                  6 / 3 on this card for the stage talk.
                 </CardDescription>
               </CardHeader>
               <Separator />

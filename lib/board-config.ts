@@ -23,30 +23,47 @@ type SettingsRow = {
 }
 
 /**
- * Stage board is 6 seats / 3 CIBA yeses. Focus sets 2 / 2 on /host for
- * rehearsal. Values live in demo_settings — not env, not a code flag.
- * A claim in the CIBA-or-calendar-catch-up window uses the pair frozen
- * on the claim row at CIBA start, not this live row.
+ * Rehearsal default is 1 seat / 1 CIBA yes. Focus raises to 6 / 3 on
+ * /host for the stage talk. Values live in demo_settings — not env,
+ * not a code flag. A claim in the CIBA-or-calendar-catch-up window
+ * uses the pair frozen on the claim row at CIBA start, not this live
+ * row. Existing singleton rows are rewritten to 1/1 once
+ * (`defaults_version`); a later host save of 6/3 is kept.
  */
 let schemaReady = false
+
+const DEFAULTS_VERSION = 2
 
 export async function ensureBoardRulesSchema(): Promise<void> {
   if (schemaReady) return
   await sql`
     create table if not exists demo_settings (
       singleton boolean primary key default true check (singleton),
-      board_size integer not null default 6
+      board_size integer not null default 1
         check (board_size >= 1 and board_size <= 24),
-      yes_threshold integer not null default 3
+      yes_threshold integer not null default 1
         check (yes_threshold >= 1 and yes_threshold <= board_size),
+      defaults_version integer not null default 2,
       updated_at timestamptz not null default now(),
       updated_by text
     )
   `
+  await sql`alter table demo_settings add column if not exists defaults_version integer not null default 1`
+  await sql`alter table demo_settings alter column board_size set default 1`
+  await sql`alter table demo_settings alter column yes_threshold set default 1`
   await sql`
-    insert into demo_settings (singleton, board_size, yes_threshold)
-    values (true, 6, 3)
+    insert into demo_settings (singleton, board_size, yes_threshold, defaults_version)
+    values (true, ${DEFAULTS.boardSize}, ${DEFAULTS.yesThreshold}, ${DEFAULTS_VERSION})
     on conflict (singleton) do nothing
+  `
+  await sql`
+    update demo_settings
+    set
+      board_size = ${DEFAULTS.boardSize},
+      yes_threshold = ${DEFAULTS.yesThreshold},
+      defaults_version = ${DEFAULTS_VERSION},
+      updated_at = now()
+    where singleton = true and defaults_version < ${DEFAULTS_VERSION}
   `
   await sql`alter table claims add column if not exists ciba_board_size integer`
   await sql`alter table claims add column if not exists ciba_yes_threshold integer`

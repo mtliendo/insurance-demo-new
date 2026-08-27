@@ -69,17 +69,6 @@ export async function getLatestClaimForUser(userId: string): Promise<Claim | nul
   return rows[0] ? toClaim(rows[0]) : null
 }
 
-/** The public approver queue: claims the audience can vote on. */
-export async function getClaimsAwaitingApproval(): Promise<Claim[]> {
-  const rows = (await sql`
-    select * from claims
-    where status in ('awaiting_approval', 'approved')
-    order by created_at desc
-    limit 10
-  `) as ClaimRow[]
-  return rows.map(toClaim)
-}
-
 export async function listMessages(claimId: string): Promise<ChatMessage[]> {
   const rows = (await sql`
     select role, content from messages
@@ -137,31 +126,6 @@ export async function submitClaim(claimId: string): Promise<void> {
   `
 }
 
-export async function getApprovalCount(claimId: string): Promise<number> {
-  const rows = (await sql`
-    select count(*)::int as count from claim_approvals where claim_id = ${claimId}
-  `) as { count: number }[]
-  return rows[0]?.count ?? 0
-}
-
-/**
- * Records one anonymous "like" on /approve. This is a ticker, not the grant —
- * CIBA board yeses are what release the claim.
- * The unique (claim_id, approver_id) constraint makes repeat clicks a no-op.
- */
-export async function recordApproval(
-  claimId: string,
-  approverId: string,
-): Promise<number> {
-  await sql`
-    insert into claim_approvals (claim_id, approver_id)
-    values (${claimId}, ${approverId})
-    on conflict (claim_id, approver_id) do nothing
-  `
-
-  return getApprovalCount(claimId)
-}
-
 export async function setCibaBlockReason(
   claimId: string,
   reason: CibaBlockReason | null,
@@ -213,35 +177,30 @@ export async function getLatestSubmittedClaim(): Promise<Claim | null> {
   return rows[0] ? toClaim(rows[0]) : null
 }
 
-export async function hasApproved(claimId: string, approverId: string): Promise<boolean> {
-  const rows = (await sql`
-    select 1 from claim_approvals
-    where claim_id = ${claimId} and approver_id = ${approverId}
-    limit 1
-  `) as unknown[]
-  return rows.length > 0
-}
-
 export type ClearedClaim = {
   id: string
   status: ClaimStatus
 }
 
 /**
- * Host rehearsal reset. Deletes the in-flight claim(s) so /file-claim
- * starts a new chat and the CIBA lock lifts. `messages`,
- * `ciba_authorizations`, and `claim_approvals` cascade from `claims`.
+ * Host rehearsal reset. Deletes the claim the /host projector shows —
+ * every `awaiting_approval` or `approved` row, including approved +
+ * `calendar_event_id` — plus the host's latest unapproved chat.
+ * `messages`, `ciba_authorizations`, and leftover `claim_approvals`
+ * cascade from `claims`. Does not delete the Google Calendar event.
  *
  * Does not touch demo_joiners, board_picks / board_members,
- * demo_settings, or Token Vault.
+ * demo_settings, Token Vault, or Auth0 users.
  */
 export async function clearCurrentClaims(hostUserId: string): Promise<ClearedClaim[]> {
   await ensureBoardRulesSchema()
 
-  const lockRows = (await sql`
+  // Projector uses getLatestSubmittedClaim (latest awaiting_approval or
+  // approved). Must delete approved+calendar rows too, or /host keeps
+  // CALENDAR WRITTEN / CIBA ticks after chat is cleared.
+  const projectorRows = (await sql`
     select id, status from claims
-    where status = 'awaiting_approval'
-       or (status = 'approved' and calendar_event_id is null)
+    where status in ('awaiting_approval', 'approved')
   `) as { id: string; status: ClaimStatus }[]
 
   const openRows = (await sql`
@@ -252,7 +211,7 @@ export async function clearCurrentClaims(hostUserId: string): Promise<ClearedCla
   `) as { id: string; status: ClaimStatus }[]
 
   const byId = new Map<string, ClaimStatus>()
-  for (const row of [...lockRows, ...openRows]) {
+  for (const row of [...projectorRows, ...openRows]) {
     byId.set(row.id, row.status)
   }
 

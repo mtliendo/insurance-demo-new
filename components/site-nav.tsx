@@ -10,7 +10,6 @@ const LINKS = [
   { href: '/', label: 'Home' },
   { href: '/join', label: 'Join' },
   { href: '/host', label: 'Board' },
-  { href: '/approve', label: 'Likes' },
 ]
 
 export function SiteNav() {
@@ -163,7 +162,7 @@ export function HeroActions() {
         )}
       </Button>
       <Button asChild size="lg" variant="hud">
-        {user ? <Link href="/profile">View Coverage</Link> : <Link href="/approve">Likes</Link>}
+        {user ? <Link href="/profile">View Coverage</Link> : <Link href="/join">Join the room</Link>}
       </Button>
     </div>
   )

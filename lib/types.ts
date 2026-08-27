@@ -49,8 +49,6 @@ export interface CibaBoardSnapshot {
 export interface ClaimSnapshot {
   claim: Claim
   messages: ChatMessage[]
-  /** Anonymous /approve ticker. Does not release the claim. */
-  likeCount: number
   /** CIBA yeses — this is the grant. */
   approvalCount: number
   board: CibaBoardSnapshot
@@ -58,14 +56,11 @@ export interface ClaimSnapshot {
 }
 
 /**
- * Stage defaults for the CIBA board. Live size and yes-threshold are
- * stored in demo_settings and edited on /host. Clients must read the
- * values from the API / claim snapshot.
+ * Rehearsal defaults for the CIBA board. Live size and yes-threshold
+ * are stored in demo_settings and edited on /host. Focus raises to
+ * 6 / 3 for the stage talk. Clients must read the values from the
+ * API / claim snapshot.
  */
-export const DEFAULT_BOARD_SIZE = 6
-export const DEFAULT_CIBA_YES_THRESHOLD = 3
+export const DEFAULT_BOARD_SIZE = 1
+export const DEFAULT_CIBA_YES_THRESHOLD = 1
 export const MAX_BOARD_SIZE = 24
-
-/** Kept for the public likes ticker on /approve. Not the authorization path. */
-export const TOTAL_APPROVERS = 4
-export const REQUIRED_APPROVALS = 3
