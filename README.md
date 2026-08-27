@@ -25,7 +25,8 @@ Read that first; nothing here runs without those.
    included.
 3. **The host files the claim in chat.** `/file-claim` is the same Anthropic
    claims agent as before (white 2006 Honda Pilot, Hulk-smashed car). Confirm
-   submission flips the row to `awaiting_approval`.
+   submission flips the row to `awaiting_approval` and starts CIBA for the
+   seated board. If start is blocked, the agent says why in chat.
 4. **CIBA email goes to the six, not the room.** If the host has not connected
    Google Calendar, we refuse to send — a yes would be hollow. Otherwise we
    `POST /bc-authorize` per seated member (`login_hint` `iss_sub`,
@@ -75,8 +76,10 @@ only — no calendar scope, no `offline_access`. Only the host hits
 [mtliendo/auth0-calendar-workshop](https://github.com/mtliendo/auth0-calendar-workshop).
 
 **The agent.** [lib/agent/](lib/agent/) is unchanged in conversation: same
-system prompt, same three tools. `publish_claim_submission` now also starts
-CIBA for the seated six.
+system prompt, same three tools. `publish_claim_submission` starts CIBA for
+the seated board (same grant as `POST /api/ciba`) and returns the start
+result so the agent can tell the filer if mail went out or why it did not.
+Host **Send CIBA** stays as a fallback if Google or the board lagged.
 
 **State and realtime.** There is no websocket. `/file-claim` and `/host` refresh
 UI every 2s. Auth0 `/oauth/token` is only hit when a pending `auth_req_id` is
@@ -179,7 +182,8 @@ later `/host` save. Board rules stay locked while a claim is
 2. Projector on `/host`. Audience scans the QR → Auth0 login → `/join`.
 3. **Pick board.** Six phones show "you're on the board." Pin friends and pick
    again if you need a ringer in the six.
-4. Host files the Hulk-smashed-car claim on `/file-claim`. Confirm submission.
+4. Host files the Hulk-smashed-car claim on `/file-claim`. Confirm submission —
+   the claims agent starts CIBA. Host **Send CIBA** is only a fallback.
 5. Six CIBA emails go out (`requested_expiry=600`). The projector ticks
    pending → approved / denied.
 6. Three yeses approve the claim, confetti fires, and a calendar event lands

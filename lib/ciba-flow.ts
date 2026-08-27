@@ -29,11 +29,99 @@ import {
 import { canWriteHostCalendar, isDemoHost } from '@/lib/host'
 import type { Claim } from '@/lib/types'
 
+export type CibaStartFailReason =
+  | 'no_google'
+  | 'no_board'
+  | 'short_board'
+  | 'already_started'
+  | 'not_host'
+
 export type CibaStartResult =
-  | { ok: true; started: number }
-  | { ok: false; reason: 'no_google' | 'no_board' | 'already_started' | 'not_host' }
+  | { ok: true; started: number; seated: number }
+  | {
+      ok: false
+      reason: CibaStartFailReason
+      seated?: number
+      required?: number
+    }
 
 type SessionUser = { sub?: string; email?: string | null }
+
+function boardSizeFail(
+  seated: number,
+  required: number,
+): Extract<CibaStartResult, { ok: false }> {
+  if (seated === 0) {
+    return { ok: false, reason: 'no_board', seated, required }
+  }
+  return { ok: false, reason: 'short_board', seated, required }
+}
+
+/**
+ * Tool-result copy for the claims agent. The model must tell the filer
+ * this — publish_claim_submission used to discard the start result, so
+ * a blocked grant looked like a successful send.
+ */
+export function cibaStartAgentMessage(result: CibaStartResult): string {
+  if (result.ok) {
+    if (result.started === 0) {
+      return [
+        'Claim is submitted (status awaiting_approval), but CIBA emails were NOT sent.',
+        `Auth0 accepted none of the ${result.seated} seated board member(s).`,
+        'Tell the filer that in chat. Do not say the board was emailed.',
+        'The host Send CIBA control on /host is a fallback if this was lag.',
+      ].join(' ')
+    }
+    const all = result.started === result.seated
+    return [
+      `Claim submitted. CIBA email grant started for ${result.started} of ${result.seated} seated board member(s)`,
+      '(same grant as POST /api/ciba, requested_expiry=600).',
+      all
+        ? 'Thank the user and tell them the seated board was just emailed to review the claim.'
+        : 'Tell the filer some seats were emailed and the projector will show any Auth0 errors.',
+      'Do not send them to /host to send mail.',
+    ].join(' ')
+  }
+
+  const prefix =
+    'Claim is submitted (status awaiting_approval), but CIBA emails were NOT sent.'
+
+  switch (result.reason) {
+    case 'no_google':
+      return [
+        prefix,
+        'Reason: host Google Calendar is not connected (Token Vault is host-only; audience never connects Google).',
+        'Tell the filer that in chat. A board yes is hollow without a host calendar.',
+        'They should connect Google on Settings, then confirm send again here.',
+        'Host Send CIBA is only a fallback.',
+      ].join(' ')
+    case 'no_board':
+      return [
+        prefix,
+        `Reason: no board is seated (need exactly ${result.required ?? 'the saved size'}).`,
+        'Tell the filer that in chat. CIBA mail does not go to the room.',
+        'Host Send CIBA is only a fallback after a board is picked.',
+      ].join(' ')
+    case 'short_board':
+      return [
+        prefix,
+        `Reason: seated board is ${result.seated ?? 0}, required exact size is ${result.required ?? 'unknown'}.`,
+        'Tell the filer the board is short and emails were not sent.',
+        'Host Send CIBA is only a fallback after a full board is picked.',
+      ].join(' ')
+    case 'already_started':
+      return [
+        'CIBA is already live for this claim.',
+        'Tell the filer the board emails are already out. Do not imply they need to resend.',
+      ].join(' ')
+    case 'not_host':
+      return [
+        prefix,
+        'Reason: only the demo host session can start CIBA (host-only Token Vault; audience never connects Google).',
+        'Tell the filer that in chat.',
+      ].join(' ')
+  }
+}
 
 /**
  * When a claim flips to awaiting_approval, email the seated board — not
@@ -57,20 +145,20 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
   }
 
   const claim = await getClaim(claimId)
-  if (!claim) return { ok: false, reason: 'no_board' }
+  if (!claim) return { ok: false, reason: 'no_board', seated: 0 }
 
   const live = await getBoardSettings()
   const intended = frozenBoardRules(claim) ?? live
   const board = await getCurrentBoard()
   if (!isFullBoard(board.length, intended.boardSize)) {
     await setCibaBlockReason(claimId, 'no_board')
-    return { ok: false, reason: 'no_board' }
+    return boardSizeFail(board.length, intended.boardSize)
   }
 
   const frozen = await freezeCibaBoardRules(claimId, intended)
   if (!isFullBoard(board.length, frozen.boardSize)) {
     await setCibaBlockReason(claimId, 'no_board')
-    return { ok: false, reason: 'no_board' }
+    return boardSizeFail(board.length, frozen.boardSize)
   }
 
   await setCibaBlockReason(claimId, null)
@@ -110,7 +198,7 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
     }
   }
 
-  return { ok: true, started }
+  return { ok: true, started, seated: board.length }
 }
 
 /**

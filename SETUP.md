@@ -251,8 +251,12 @@ Then walk the happy path:
 3. `/host` → QR is on screen. A second browser opens `/join`, logs in with a
    **verified** email, and waits.
 4. **Pick board.** The joiner phone shows "you're on the board."
-5. `/file-claim` → describe the Hulk incident. Confirm submission. Six CIBA
-   emails go out (`requested_expiry=600`). The projector ticks as they Accept.
+5. `/file-claim` → describe the Hulk incident. Confirm submission. The claims
+   agent starts CIBA for the seated board (`publish_claim_submission` →
+   `startCibaForSubmittedClaim`, same grant as `POST /api/ciba`). If start is
+   blocked (no Google, no/short board, already live), the agent says so in
+   chat. Host **Send CIBA** is a fallback. Six emails go out
+   (`requested_expiry=600`). The projector ticks as they Accept.
 6. Three yeses → claim `approved`, confetti, calendar event on the host Google
    account. `/approve` likes do **not** release the claim.
 

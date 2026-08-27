@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk'
-import { startCibaForSubmittedClaim } from '@/lib/ciba-flow'
+import { cibaStartAgentMessage, startCibaForSubmittedClaim } from '@/lib/ciba-flow'
 import { flagFraud, saveClaimDetails, submitClaim } from '@/lib/claims'
 import { MOCK_VEHICLE_DATA } from '@/lib/agent/system-prompt'
 import type { Claim } from '@/lib/types'
@@ -49,7 +49,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: 'publish_claim_submission',
     description:
-      'Submit the claim for processing after the user explicitly confirms they want to submit. This sends the claim to the processing team for approval.',
+      'Submit the claim after the user explicitly confirms they want it sent. Flips the claim to awaiting_approval and starts CIBA email for the seated board (same grant as POST /api/ciba / host Send CIBA). The tool result says whether mail went out or why it did not — tell the user that. Do not claim the board was emailed unless the result says CIBA started.',
     input_schema: {
       type: 'object',
       properties: {
@@ -103,12 +103,12 @@ Ask the user if they are ready to submit this claim for processing.`
     }
 
     case 'publish_claim_submission': {
-      if (!input.confirmSubmission) {
+      if (input.confirmSubmission !== true && input.confirmSubmission !== 'true') {
         return 'Claim submission cancelled. Ask the user if they would like to make any changes before submitting.'
       }
       await submitClaim(claim.id)
-      await startCibaForSubmittedClaim(claim.id)
-      return 'Claim submitted successfully. Thank the user and let them know the Claim Processing team will review this claim and provide a status update.'
+      const ciba = await startCibaForSubmittedClaim(claim.id)
+      return cibaStartAgentMessage(ciba)
     }
 
     default:
