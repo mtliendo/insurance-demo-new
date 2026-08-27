@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { auth0 } from '@/lib/auth0'
+import { getBoardSettings } from '@/lib/board-config'
 import { isGoogleConnected } from '@/lib/google'
 import { isDemoHost } from '@/lib/host'
 import { SiteNav } from '@/components/site-nav'
@@ -20,6 +21,7 @@ export default async function SettingsPage({
 
   const params = await searchParams
   const error = typeof params.error === 'string' ? params.error : null
+  const settings = await getBoardSettings()
 
   return (
     <>
@@ -29,6 +31,8 @@ export default async function SettingsPage({
         userEmail={typeof session.user.email === 'string' ? session.user.email : ''}
         googleConnected={await isGoogleConnected()}
         connectError={error}
+        boardSize={settings.boardSize}
+        yesThreshold={settings.yesThreshold}
       />
     </>
   )

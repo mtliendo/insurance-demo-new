@@ -1,7 +1,6 @@
 import { sql } from '@/lib/db'
 import { CIBA_INTERVAL_FLOOR, isPollDue } from '@/lib/ciba-interval'
 import type { CibaBoardMember, CibaStatus } from '@/lib/types'
-import { CIBA_REQUIRED_APPROVALS } from '@/lib/types'
 
 export type CibaRow = {
   id: string
@@ -143,6 +142,6 @@ export async function countCibaApproved(claimId: string): Promise<number> {
   return rows[0]?.count ?? 0
 }
 
-export function cibaMetThreshold(approvedCount: number): boolean {
-  return approvedCount >= CIBA_REQUIRED_APPROVALS
+export function cibaMetThreshold(approvedCount: number, yesThreshold: number): boolean {
+  return approvedCount >= yesThreshold
 }

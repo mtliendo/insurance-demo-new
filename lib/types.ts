@@ -16,6 +16,9 @@ export interface Claim {
   createdAt: string
   calendarEventId: string | null
   cibaBlockReason: CibaBlockReason | null
+  /** Frozen at CIBA start. Null until emails go out. */
+  cibaBoardSize: number | null
+  cibaYesThreshold: number | null
 }
 
 export interface ChatMessage {
@@ -54,9 +57,14 @@ export interface ClaimSnapshot {
   googleConnected: boolean
 }
 
-/** CIBA board: 6 seated, 3 yeses release the claim. */
-export const BOARD_SIZE = 6
-export const CIBA_REQUIRED_APPROVALS = 3
+/**
+ * Stage defaults for the CIBA board. Live size and yes-threshold are
+ * stored in demo_settings and edited on /host. Clients must read the
+ * values from the API / claim snapshot.
+ */
+export const DEFAULT_BOARD_SIZE = 6
+export const DEFAULT_CIBA_YES_THRESHOLD = 3
+export const MAX_BOARD_SIZE = 24
 
 /** Kept for the public likes ticker on /approve. Not the authorization path. */
 export const TOTAL_APPROVERS = 4

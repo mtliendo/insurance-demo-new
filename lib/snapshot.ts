@@ -1,24 +1,20 @@
 import { getCurrentBoard } from '@/lib/board'
+import { boardRulesForClaim } from '@/lib/board-config'
 import { listCibaForClaim, toCibaMember } from '@/lib/ciba-store'
 import { getApprovalCount, listMessages } from '@/lib/claims'
 import { isGoogleConnected } from '@/lib/google'
-import {
-  BOARD_SIZE,
-  CIBA_REQUIRED_APPROVALS,
-  type CibaBoardSnapshot,
-  type Claim,
-  type ClaimSnapshot,
-} from '@/lib/types'
+import type { CibaBoardSnapshot, Claim, ClaimSnapshot } from '@/lib/types'
 
 export async function getCibaBoardSnapshot(claim: Claim): Promise<CibaBoardSnapshot> {
+  const { boardSize, yesThreshold } = await boardRulesForClaim(claim)
   const rows = await listCibaForClaim(claim.id)
   if (rows.length > 0) {
     const members = rows.map(toCibaMember)
     return {
       members,
       approvedCount: members.filter((m) => m.status === 'approved').length,
-      requiredApprovals: CIBA_REQUIRED_APPROVALS,
-      boardSize: BOARD_SIZE,
+      requiredApprovals: yesThreshold,
+      boardSize,
       blockReason: claim.cibaBlockReason,
       calendarEventId: claim.calendarEventId,
       started: true,
@@ -34,8 +30,8 @@ export async function getCibaBoardSnapshot(claim: Claim): Promise<CibaBoardSnaps
       status: 'pending' as const,
     })),
     approvedCount: 0,
-    requiredApprovals: CIBA_REQUIRED_APPROVALS,
-    boardSize: BOARD_SIZE,
+    requiredApprovals: yesThreshold,
+    boardSize,
     blockReason: claim.cibaBlockReason,
     calendarEventId: claim.calendarEventId,
     started: false,

@@ -1,6 +1,6 @@
+import { getBoardSettings } from '@/lib/board-config'
 import { sql } from '@/lib/db'
 import { isHostIdentity } from '@/lib/host'
-import { BOARD_SIZE } from '@/lib/types'
 
 export type Joiner = {
   sub: string
@@ -129,26 +129,33 @@ export function eligibleJoiners(joiners: Joiner[]): Joiner[] {
 }
 
 /**
- * Randomly select 6 verified joiners. Pinned rows (planted friends)
- * are always included first; the rest of the seats are shuffled in.
- * The host is never seated — they file the claim, they don't CIBA it.
+ * Randomly select the saved board size of verified joiners (stage default 6).
+ * Pinned rows (planted friends) are always included first; the rest
+ * of the seats are shuffled in. The host is never seated — they file
+ * the claim, they don't CIBA it.
  */
-export function selectBoard(joiners: Joiner[]): Joiner[] {
+export function selectBoard(joiners: Joiner[], size: number): Joiner[] {
   const eligible = eligibleJoiners(joiners)
   const pinned = eligible.filter((j) => j.pinned)
   const rest = shuffle(eligible.filter((j) => !j.pinned))
-  return [...pinned, ...rest].slice(0, BOARD_SIZE)
+  return [...pinned, ...rest].slice(0, size)
 }
 
 export async function pickBoard(pickedBy: string): Promise<BoardMember[]> {
+  const { boardSize: size } = await getBoardSettings()
   const joiners = await listJoiners()
   const eligible = eligibleJoiners(joiners)
-  if (eligible.length < BOARD_SIZE) {
+  if (eligible.length < size) {
     throw new Error(
-      `Need ${BOARD_SIZE} verified joiners to pick a board. Currently ${eligible.length}.`,
+      `Need ${size} verified joiners to pick a board. Currently ${eligible.length}.`,
     )
   }
-  const selected = selectBoard(joiners)
+  const selected = selectBoard(joiners, size)
+  if (selected.length !== size) {
+    throw new Error(
+      `Need ${size} verified joiners to pick a board. Currently ${selected.length}.`,
+    )
+  }
 
   const pickRows = (await sql`
     insert into board_picks (picked_by)

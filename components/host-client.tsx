@@ -1,14 +1,19 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { CalendarCheck, Pin, PinOff, QrCode, Shuffle, TriangleAlert } from 'lucide-react'
+import { CalendarCheck, Pin, PinOff, QrCode, Shuffle, SlidersHorizontal, TriangleAlert } from 'lucide-react'
 import { BoardPanel } from '@/components/board-panel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import type { CibaBoardSnapshot } from '@/lib/types'
+import {
+  DEFAULT_BOARD_SIZE,
+  DEFAULT_CIBA_YES_THRESHOLD,
+  MAX_BOARD_SIZE,
+  type CibaBoardSnapshot,
+} from '@/lib/types'
 
 type Joiner = {
   sub: string
@@ -22,6 +27,7 @@ type BoardState = {
   joiners: Joiner[]
   board: { sub: string; email: string; name: string }[]
   boardSize: number
+  yesThreshold: number
   verifiedCount: number
   canPick: boolean
   googleConnected: boolean
@@ -47,7 +53,11 @@ export function HostClient({
   const [state, setState] = useState<BoardState | null>(null)
   const [picking, setPicking] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [savingRules, setSavingRules] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [draftSize, setDraftSize] = useState(DEFAULT_BOARD_SIZE)
+  const [draftThreshold, setDraftThreshold] = useState(DEFAULT_CIBA_YES_THRESHOLD)
+  const syncedRules = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/board', { cache: 'no-store' })
@@ -55,7 +65,14 @@ export function HostClient({
       const body = await res.json().catch(() => ({}))
       throw new Error(body.error || `Board ${res.status}`)
     }
-    setState((await res.json()) as BoardState)
+    const next = (await res.json()) as BoardState
+    setState(next)
+    const key = `${next.boardSize}:${next.yesThreshold}`
+    if (syncedRules.current !== key) {
+      syncedRules.current = key
+      setDraftSize(next.boardSize)
+      setDraftThreshold(next.yesThreshold)
+    }
   }, [])
 
   useEffect(() => {
@@ -99,6 +116,25 @@ export function HostClient({
     await load()
   }
 
+  const saveRules = async () => {
+    setSavingRules(true)
+    try {
+      const res = await fetch('/api/board/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardSize: draftSize, yesThreshold: draftThreshold }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || 'Save failed')
+      syncedRules.current = null
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSavingRules(false)
+    }
+  }
+
   const startCiba = async () => {
     setStarting(true)
     try {
@@ -113,12 +149,24 @@ export function HostClient({
     }
   }
 
-  const boardSize = state?.boardSize ?? 6
+  const boardSize = state?.boardSize ?? DEFAULT_BOARD_SIZE
+  const yesThreshold = state?.yesThreshold ?? DEFAULT_CIBA_YES_THRESHOLD
   const verified = state?.joiners.filter((j) => j.emailVerified) ?? []
   const unverified = state?.joiners.filter((j) => !j.emailVerified) ?? []
   const verifiedCount = state?.verifiedCount ?? verified.length
   const enoughVerified = verifiedCount >= boardSize
   const pickEnabled = Boolean(state?.canPick) && enoughVerified && !picking
+  const fullBoard = (state?.board.length ?? 0) === boardSize
+  const rulesEnabled = Boolean(state?.canPick) && !savingRules
+  const rulesInvalid =
+    !Number.isInteger(draftSize) ||
+    draftSize < 1 ||
+    draftSize > MAX_BOARD_SIZE ||
+    !Number.isInteger(draftThreshold) ||
+    draftThreshold < 1 ||
+    draftThreshold > draftSize
+  const rulesDirty =
+    state != null && (draftSize !== state.boardSize || draftThreshold !== state.yesThreshold)
   const blockReason = state?.claim?.board.blockReason
   const needsCibaStart =
     state?.claim?.status === 'awaiting_approval' &&
@@ -136,8 +184,9 @@ export function HostClient({
               CIBA board
             </h1>
             <p className="mt-2 max-w-xl text-muted-foreground">
-              One QR for the room. Pick six. File the Hulk claim. Three email yeses
-              release it and write your calendar.
+              One QR for the room. Pick {boardSize}. File the Hulk claim.{' '}
+              {yesThreshold} email yes{yesThreshold === 1 ? '' : 'es'} release it
+              and write your calendar.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -202,6 +251,68 @@ export function HostClient({
             )}
 
             <Card className="hud-panel animate-rise stagger-1 rounded-none border-transparent">
+              <CardHeader className="pt-5">
+                <CardTitle className="flex items-center gap-2 text-base uppercase">
+                  <SlidersHorizontal className="h-4 w-4 text-hud" />
+                  Board rules
+                </CardTitle>
+                <CardDescription>
+                  Stage default is {DEFAULT_BOARD_SIZE} seats / {DEFAULT_CIBA_YES_THRESHOLD}{' '}
+                  yeses. Set 2 and 2 to rehearse without six Auth0 accounts.
+                </CardDescription>
+              </CardHeader>
+              <Separator />
+              <CardContent className="space-y-4 pt-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-1.5 text-sm">
+                    <span className="hud-label text-[0.6rem]">Board size</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={MAX_BOARD_SIZE}
+                      step={1}
+                      value={Number.isFinite(draftSize) ? draftSize : ''}
+                      disabled={!rulesEnabled}
+                      onChange={(e) => setDraftSize(Number(e.target.value))}
+                      className="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm focus:border-hud/60 focus:outline-none focus:ring-2 focus:ring-hud/30"
+                    />
+                  </label>
+                  <label className="space-y-1.5 text-sm">
+                    <span className="hud-label text-[0.6rem]">CIBA yes threshold</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={Number.isFinite(draftSize) ? draftSize : MAX_BOARD_SIZE}
+                      step={1}
+                      value={Number.isFinite(draftThreshold) ? draftThreshold : ''}
+                      disabled={!rulesEnabled}
+                      onChange={(e) => setDraftThreshold(Number(e.target.value))}
+                      className="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm focus:border-hud/60 focus:outline-none focus:ring-2 focus:ring-hud/30"
+                    />
+                  </label>
+                </div>
+                {rulesInvalid && (
+                  <p className="text-xs text-gold">
+                    Threshold must be at least 1 and cannot exceed board size. Size is 1–
+                    {MAX_BOARD_SIZE}.
+                  </p>
+                )}
+                {state?.canPick === false && (
+                  <p className="text-xs text-gold">
+                    A claim is in CIBA or waiting on the calendar write. Reset it
+                    before changing board rules.
+                  </p>
+                )}
+                <Button
+                  onClick={() => void saveRules()}
+                  disabled={!rulesEnabled || rulesInvalid || !rulesDirty}
+                >
+                  {savingRules ? 'Saving…' : 'Save board rules'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="hud-panel animate-rise stagger-1 rounded-none border-transparent">
               <CardHeader className="flex flex-row items-start justify-between gap-4 pt-5">
                 <div>
                   <CardTitle className="text-base uppercase">Joiners</CardTitle>
@@ -249,12 +360,14 @@ export function HostClient({
                 {state && !enoughVerified && (
                   <p className="text-xs text-gold">
                     Need {boardSize} verified joiners before you can pick. A short
-                    board can never hit three CIBA yeses.
+                    board can never hit {yesThreshold} CIBA yes
+                    {yesThreshold === 1 ? '' : 'es'}.
                   </p>
                 )}
                 {state?.canPick === false && (
                   <p className="text-xs text-gold">
-                    CIBA is live for a claim. Reset the claim before picking again.
+                    A claim is in CIBA or waiting on the calendar write. Reset it
+                    before picking again.
                   </p>
                 )}
               </CardContent>
@@ -286,16 +399,17 @@ export function HostClient({
               <CardContent className="space-y-4 pt-5">
                 {blockReason === 'no_google' && (
                   <p className="text-sm text-gold">
-                    Claim is waiting. Connect Google, then send the six CIBA emails.
+                    Claim is waiting. Connect Google, then send the {boardSize} CIBA
+                    emails.
                   </p>
                 )}
                 {blockReason === 'no_board' && (
                   <p className="text-sm text-gold">
-                    Claim is waiting. Pick a board of six, then send CIBA.
+                    Claim is waiting. Pick a board of {boardSize}, then send CIBA.
                   </p>
                 )}
                 {(blockReason || needsCibaStart) && state?.googleConnected && (
-                  <Button onClick={() => void startCiba()} disabled={starting || !state.board.length}>
+                  <Button onClick={() => void startCiba()} disabled={starting || !fullBoard}>
                     {starting ? 'Sending…' : 'Send CIBA emails'}
                   </Button>
                 )}
@@ -309,7 +423,7 @@ export function HostClient({
                         status: 'pending',
                       })),
                       approvedCount: 0,
-                      requiredApprovals: 3,
+                      requiredApprovals: yesThreshold,
                       boardSize: state.boardSize,
                       blockReason: null,
                       calendarEventId: null,
@@ -317,7 +431,9 @@ export function HostClient({
                     }}
                   />
                 ) : (
-                  <p className="text-sm text-muted-foreground">Pick a board to seat six names.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Pick a board to seat {boardSize} names.
+                  </p>
                 )}
               </CardContent>
             </Card>

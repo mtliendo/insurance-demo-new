@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react'
 import { CheckCircle2, Mail, Radar, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DEFAULT_BOARD_SIZE } from '@/lib/types'
 
 type JoinState = {
   host: boolean
   emailVerified: boolean
   onBoard: boolean
   joiner: { name: string; email: string } | null
+  boardSize?: number
   claimStatus: string | null
   ciba: { status: string; bindingMessage: string; error: string | null } | null
 }
@@ -130,6 +132,8 @@ export function JoinClient({
     )
   }
 
+  const boardSize = state?.boardSize ?? DEFAULT_BOARD_SIZE
+
   if (state?.onBoard) {
     const ciba = state.ciba
     return (
@@ -143,7 +147,8 @@ export function JoinClient({
             <span className="hud-label text-stone-time">Seated</span>
             <CardTitle className="mt-2 text-3xl uppercase">You&apos;re on the board</CardTitle>
             <CardDescription className="max-w-sm text-base">
-              {userName}, you are one of the six. Watch the projector — your name is up there.
+              {userName}, you are one of the {boardSize}. Watch the projector — your name is up
+              there.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 pb-10 text-center">
@@ -194,7 +199,7 @@ export function JoinClient({
           <CardTitle className="uppercase">In the room</CardTitle>
           <CardDescription className="max-w-sm">
             {error ??
-              'Logged in. Waiting for the operator to pick the board of six. Keep this page open.'}
+              `Logged in. Waiting for the operator to pick the board of ${boardSize}. Keep this page open.`}
           </CardDescription>
           <Badge variant="hud" className="mt-4">
             {state?.joiner ? 'Joined' : 'Connecting…'}

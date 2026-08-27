@@ -113,6 +113,19 @@ Google. Set Focus's email (and `sub` once you have it) so audience logins
 cannot operate the console. Token Vault calendar writes additionally require
 the current session `sub` to match `DEMO_HOST_SUB` when that env is set.
 
+### Board size and CIBA yes threshold
+
+Stage defaults stay **pick 6 / 3 yeses**. Focus changes them on **`/host` →
+Board rules**. The values persist in Neon `demo_settings` (not env). Rehearsal
+is size 2 / threshold 2 — both seated members must CIBA-yes. Do not hardcode
+the stage demo to 2. Threshold must be ≥ 1 and ≤ board size.
+
+The host console shows `N/{size}` and disables Pick until verified (non-host)
+joiners ≥ the saved size. `POST /api/board/pick` rejects a short room. CIBA
+start refuses a seated board that is not exactly the saved size. Calendar
+write and `claim.status = approved` fire only after yeses ≥ the saved
+threshold.
+
 ### CIBA email grant
 
 CIBA is not on the Free plan. Enable **Client Initiated Backchannel
@@ -176,7 +189,7 @@ human to click through the console. The full sequence:
    `neondb`. Write the result into `.env.local` as `DATABASE_URL`.
 5. **`get_database_tables`** to verify. Expect `claims`, `messages`,
    `claim_approvals`, `demo_joiners`, `board_picks`, `board_members`,
-   `ciba_authorizations`.
+   `ciba_authorizations`, `demo_settings`.
 
 ```dotenv
 DATABASE_URL=postgresql://...@ep-....neon.tech/neondb?sslmode=require
@@ -195,12 +208,13 @@ psql "$DATABASE_URL" -f db/schema.sql
 
 | Table | Replaces | Role |
 | ----- | -------- | ---- |
-| `claims` | DynamoDB `claims` | One row per claim; `status` drives the whole demo |
+| `claims` | DynamoDB `claims` | One row per claim; `status` drives the whole demo. CIBA start freezes `ciba_board_size` / `ciba_yes_threshold`. |
 | `messages` | DynamoDB `messages` | Chat transcript, so a refresh resumes the claim |
 | `claim_approvals` | AppSync `CLAIM_APPROVAL` events | Public likes ticker — not the grant |
 | `demo_joiners` | — | QR joiners (`sub`, email, name, verified, pinned) |
 | `board_picks` / `board_members` | — | Latest pick of 6 |
 | `ciba_authorizations` | anonymous 3-of-4 | `{authReqId, sub, email, name, status}` per seat |
+| `demo_settings` | — | Host-saved board size and CIBA yes threshold (default 6 / 3) |
 
 ---
 
@@ -252,7 +266,7 @@ Then walk the happy path:
 | Sign-in works but every page 401s | App created as a SPA — recreate it as a Regular Web Application |
 | Agent replies "Sorry, I encountered an error" | Bad or unfunded `ANTHROPIC_API_KEY`; check the server log for `Agent error:` |
 | `relation "claims" does not exist` | Step 2's migration never ran against the branch this `DATABASE_URL` points at |
-| Approvals never release the claim | `/approve` likes are not the grant — need 3 CIBA yeses from the seated six |
+| Approvals never release the claim | `/approve` likes are not the grant — need the host-saved yes threshold (default 3) from the seated board (default 6) |
 | Host console 503 / nobody is host | `DEMO_HOST_EMAIL` and `DEMO_HOST_SUB` are both empty — the gate fails closed |
 | CIBA emails never send | Host has not connected Google, no board picked, or `requested_expiry` is ≤300 (Guardian) |
 | Auth0 `slow_down` on stage | Polls must honor stored `interval_sec` (floor 5). Do not reset after `authorization_pending`. |

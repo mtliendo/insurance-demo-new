@@ -3,6 +3,7 @@ import { auth0 } from '@/lib/auth0'
 import { pollCibaForClaim } from '@/lib/ciba-flow'
 import { getClaim } from '@/lib/claims'
 import { isDemoHost } from '@/lib/host'
+import { isCibaCatchUpWindow } from '@/lib/board-config'
 import { buildClaimSnapshot } from '@/lib/snapshot'
 import type { ClaimSnapshot } from '@/lib/types'
 
@@ -31,10 +32,7 @@ export async function GET(
   }
 
   const hostPolling = isDemoHost(session.user)
-  if (
-    hostPolling &&
-    (claim.status === 'awaiting_approval' || (claim.status === 'approved' && !claim.calendarEventId))
-  ) {
+  if (hostPolling && isCibaCatchUpWindow(claim)) {
     claim = (await pollCibaForClaim(claim.id, session.user)) ?? claim
   }
 

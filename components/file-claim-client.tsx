@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/card'
 import { BoardPanel } from '@/components/board-panel'
 import type { ClaimSnapshot } from '@/lib/types'
-import { CIBA_REQUIRED_APPROVALS } from '@/lib/types'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -140,7 +139,7 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
   }
 
   const { claim, messages, approvalCount, board, googleConnected } = snapshot
-  const remaining = CIBA_REQUIRED_APPROVALS - approvalCount
+  const remaining = board.requiredApprovals - approvalCount
   const isApproved = claim.status === 'approved'
   const isAwaiting = claim.status === 'awaiting_approval'
 
@@ -173,7 +172,8 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
               <span className="hud-label text-stone-time">Claim cleared</span>
               <CardTitle className="mt-2 text-2xl uppercase">Claim Approved</CardTitle>
               <CardDescription className="text-base">
-                The CIBA board of six hit three email yeses. The claim is
+                The CIBA board of {board.boardSize} hit {board.requiredApprovals}{' '}
+                email yes{board.requiredApprovals === 1 ? '' : 'es'}. The claim is
                 released
                 {claim.calendarEventId ? ' and written to the host calendar.' : '.'}
               </CardDescription>
@@ -335,7 +335,7 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
                   <span className="hud-label text-[0.6rem]">Status</span>
                   <Badge variant={isApproved ? 'success' : isAwaiting ? 'warning' : 'secondary'}>
                     {isAwaiting
-                      ? `CIBA ${approvalCount}/${CIBA_REQUIRED_APPROVALS}`
+                      ? `CIBA ${approvalCount}/${board.requiredApprovals}`
                       : isApproved
                         ? 'Approved'
                         : claim.status}
@@ -351,7 +351,7 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
 
                 {isAwaiting && board.blockReason === 'no_board' && (
                   <p className="mt-3 text-xs text-gold">
-                    Pick a board of six on the host console, then send CIBA.
+                    Pick a board of {board.boardSize} on the host console, then send CIBA.
                   </p>
                 )}
 
