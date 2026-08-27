@@ -30,6 +30,8 @@ export function FileClaimClient({
   isHost?: boolean
 }) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const startGeneration = useRef(0)
+  const liveClaimId = useRef<string | null>(null)
 
   const [snapshot, setSnapshot] = useState<ClaimSnapshot | null>(null)
   const [currentMessage, setCurrentMessage] = useState('')
@@ -38,16 +40,27 @@ export function FileClaimClient({
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 })
 
   const startClaim = useCallback(async () => {
+    const generation = ++startGeneration.current
     const res = await fetch('/api/claims', { method: 'POST' })
     if (!res.ok) {
       throw new Error('Failed to start claim')
     }
     const data = (await res.json()) as ClaimSnapshot
+    if (generation !== startGeneration.current) return
+    liveClaimId.current = data.claim.id
     setSnapshot(data)
     setShowApprovalModal(false)
     setCurrentMessage('')
     setIsSending(false)
   }, [])
+
+  const resetClaim = useCallback(async () => {
+    startGeneration.current += 1
+    liveClaimId.current = null
+    setShowApprovalModal(false)
+    setSnapshot(null)
+    await startClaim()
+  }, [startClaim])
 
   // Start (or resume) the claim.
   useEffect(() => {
@@ -76,6 +89,7 @@ export function FileClaimClient({
         const res = await fetch(`/api/claims/${claimId}`, { cache: 'no-store' })
         if (!res.ok) return
         const next: ClaimSnapshot = await res.json()
+        if (next.claim.id !== liveClaimId.current) return
         setSnapshot(next)
         if (next.claim.status === 'approved') setShowApprovalModal(true)
       } catch (error) {
@@ -150,7 +164,7 @@ export function FileClaimClient({
       <div className="flex min-h-[70vh] flex-col items-center justify-center gap-6">
         <div className="arc-reactor h-24 w-24" />
         <p className="hud-label animate-blink">Establishing secure claim channel…</p>
-        {isHost && <ClearClaimButton onCleared={startClaim} />}
+        {isHost && <ClearClaimButton onCleared={resetClaim} />}
       </div>
     )
   }
@@ -221,7 +235,7 @@ export function FileClaimClient({
               incident to the claims assistant and it will build the report as you talk.
             </p>
           </div>
-          {isHost && <ClearClaimButton onCleared={startClaim} />}
+          {isHost && <ClearClaimButton onCleared={resetClaim} />}
         </div>
 
         <div className="flex flex-col gap-6 lg:flex-row">
