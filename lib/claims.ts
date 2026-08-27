@@ -221,3 +221,47 @@ export async function hasApproved(claimId: string, approverId: string): Promise<
   `) as unknown[]
   return rows.length > 0
 }
+
+export type ClearedClaim = {
+  id: string
+  status: ClaimStatus
+}
+
+/**
+ * Host rehearsal reset. Deletes the in-flight claim(s) so /file-claim
+ * starts a new chat and the CIBA lock lifts. `messages`,
+ * `ciba_authorizations`, and `claim_approvals` cascade from `claims`.
+ *
+ * Does not touch demo_joiners, board_picks / board_members,
+ * demo_settings, or Token Vault.
+ */
+export async function clearCurrentClaims(hostUserId: string): Promise<ClearedClaim[]> {
+  await ensureBoardRulesSchema()
+
+  const lockRows = (await sql`
+    select id, status from claims
+    where status = 'awaiting_approval'
+       or (status = 'approved' and calendar_event_id is null)
+  `) as { id: string; status: ClaimStatus }[]
+
+  const openRows = (await sql`
+    select id, status from claims
+    where user_id = ${hostUserId} and status <> 'approved'
+    order by created_at desc
+    limit 1
+  `) as { id: string; status: ClaimStatus }[]
+
+  const byId = new Map<string, ClaimStatus>()
+  for (const row of [...lockRows, ...openRows]) {
+    byId.set(row.id, row.status)
+  }
+
+  const deleted: ClearedClaim[] = []
+  for (const id of byId.keys()) {
+    const rows = (await sql`
+      delete from claims where id = ${id} returning id, status
+    `) as { id: string; status: ClaimStatus }[]
+    if (rows[0]) deleted.push({ id: rows[0].id, status: rows[0].status })
+  }
+  return deleted
+}

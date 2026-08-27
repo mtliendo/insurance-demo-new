@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { BoardPanel } from '@/components/board-panel'
+import { ClearClaimButton } from '@/components/clear-claim-button'
 import type { ClaimSnapshot } from '@/lib/types'
 
 const POLL_INTERVAL_MS = 2000
@@ -21,8 +22,16 @@ const POLL_INTERVAL_MS = 2000
 /** Infinity-stone palette, in hex — react-confetti can't parse oklch(). */
 const CONFETTI_COLORS = ['#ff3b30', '#ffc400', '#3ea6ff', '#a855f7', '#22e08a', '#ff8a2b']
 
-export function FileClaimClient({ userLabel }: { userLabel: string }) {
+export function FileClaimClient({
+  userLabel,
+  isHost = false,
+}: {
+  userLabel: string
+  isHost?: boolean
+}) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const startGeneration = useRef(0)
+  const liveClaimId = useRef<string | null>(null)
 
   const [snapshot, setSnapshot] = useState<ClaimSnapshot | null>(null)
   const [currentMessage, setCurrentMessage] = useState('')
@@ -30,19 +39,39 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 })
 
+  const startClaim = useCallback(async () => {
+    const generation = ++startGeneration.current
+    const res = await fetch('/api/claims', { method: 'POST' })
+    if (!res.ok) {
+      throw new Error('Failed to start claim')
+    }
+    const data = (await res.json()) as ClaimSnapshot
+    if (generation !== startGeneration.current) return
+    liveClaimId.current = data.claim.id
+    setSnapshot(data)
+    setShowApprovalModal(false)
+    setCurrentMessage('')
+    setIsSending(false)
+  }, [])
+
+  const resetClaim = useCallback(async () => {
+    startGeneration.current += 1
+    liveClaimId.current = null
+    setShowApprovalModal(false)
+    setSnapshot(null)
+    await startClaim()
+  }, [startClaim])
+
   // Start (or resume) the claim.
   useEffect(() => {
     let cancelled = false
-    fetch('/api/claims', { method: 'POST' })
-      .then((res) => res.json())
-      .then((data: ClaimSnapshot) => {
-        if (!cancelled) setSnapshot(data)
-      })
-      .catch((error) => console.error('Failed to start claim:', error))
+    startClaim().catch((error) => {
+      if (!cancelled) console.error('Failed to start claim:', error)
+    })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [startClaim])
 
   /**
    * Polling stands in for the AppSync Events subscription. Once the agent has
@@ -60,6 +89,7 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
         const res = await fetch(`/api/claims/${claimId}`, { cache: 'no-store' })
         if (!res.ok) return
         const next: ClaimSnapshot = await res.json()
+        if (next.claim.id !== liveClaimId.current) return
         setSnapshot(next)
         if (next.claim.status === 'approved') setShowApprovalModal(true)
       } catch (error) {
@@ -134,6 +164,7 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
       <div className="flex min-h-[70vh] flex-col items-center justify-center gap-6">
         <div className="arc-reactor h-24 w-24" />
         <p className="hud-label animate-blink">Establishing secure claim channel…</p>
+        {isHost && <ClearClaimButton onCleared={resetClaim} />}
       </div>
     )
   }
@@ -193,15 +224,18 @@ export function FileClaimClient({ userLabel }: { userLabel: string }) {
       )}
 
       <div className="relative mx-auto max-w-6xl">
-        <div className="animate-rise mb-8">
-          <span className="hud-label">Claim Intake · Sector 616</span>
-          <h1 className="mt-2 font-display text-3xl font-bold uppercase tracking-tight md:text-4xl">
-            File a Claim
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Welcome, <span className="text-foreground">{userLabel}</span>. Describe your
-            incident to the claims assistant and it will build the report as you talk.
-          </p>
+        <div className="animate-rise mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <span className="hud-label">Claim Intake · Sector 616</span>
+            <h1 className="mt-2 font-display text-3xl font-bold uppercase tracking-tight md:text-4xl">
+              File a Claim
+            </h1>
+            <p className="mt-2 text-muted-foreground">
+              Welcome, <span className="text-foreground">{userLabel}</span>. Describe your
+              incident to the claims assistant and it will build the report as you talk.
+            </p>
+          </div>
+          {isHost && <ClearClaimButton onCleared={resetClaim} />}
         </div>
 
         <div className="flex flex-col gap-6 lg:flex-row">

@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          'A claim is still in CIBA or waiting on the host calendar write. Reset it before changing board rules.',
+          'A claim is still in CIBA or waiting on the host calendar write. Start over before changing board rules.',
       },
       { status: 409 },
     )

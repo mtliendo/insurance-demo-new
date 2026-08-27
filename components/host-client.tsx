@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { CalendarCheck, Pin, PinOff, QrCode, Shuffle, SlidersHorizontal, TriangleAlert } from 'lucide-react'
 import { BoardPanel } from '@/components/board-panel'
+import { ClearClaimButton } from '@/components/clear-claim-button'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -189,13 +190,14 @@ export function HostClient({
               and write your calendar.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="hud" size="sm">
               <Link href="/settings">Google Calendar</Link>
             </Button>
             <Button asChild size="sm">
               <Link href="/file-claim">File a claim</Link>
             </Button>
+            <ClearClaimButton onCleared={load} />
           </div>
         </div>
 
@@ -299,8 +301,8 @@ export function HostClient({
                 )}
                 {state?.canPick === false && (
                   <p className="text-xs text-gold">
-                    A claim is in CIBA or waiting on the calendar write. Reset it
-                    before changing board rules.
+                    A claim is in CIBA or waiting on the calendar write. Start
+                    over before changing board rules.
                   </p>
                 )}
                 <Button
@@ -366,8 +368,8 @@ export function HostClient({
                 )}
                 {state?.canPick === false && (
                   <p className="text-xs text-gold">
-                    A claim is in CIBA or waiting on the calendar write. Reset it
-                    before picking again.
+                    A claim is in CIBA or waiting on the calendar write. Start
+                    over before picking again.
                   </p>
                 )}
               </CardContent>
