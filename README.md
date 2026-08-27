@@ -90,7 +90,7 @@ are the SQL surface.
 | ----- | ---- | ------- |
 | `/` | public | Marketing landing page |
 | `/join` | login | QR landing — join the room, see board seat |
-| `/host` | host | QR, board rules, pick, projector CIBA board |
+| `/host` | host | QR, pick board (`BOARD_SIZE`, default 6), projector CIBA board |
 | `/settings` | host | Connect Google Calendar (Token Vault) |
 | `/file-claim` | protected | Chat with the claims agent; live board sidebar |
 | `/profile` | protected | Auth0 profile and the `policyId` custom claim |
@@ -100,8 +100,7 @@ are the SQL surface.
 | `POST /api/claims/[id]/chat` | protected | One agent turn |
 | `GET \| POST /api/join` | login | Upsert joiner; seat / CIBA status for this phone |
 | `GET /api/board` | host | Joiners + live board + CIBA snapshot |
-| `POST /api/board/pick` | host | Randomly seat the saved board size (pins first) |
-| `POST /api/board/settings` | host | Save board size and CIBA yes threshold |
+| `POST /api/board/pick` | host | Randomly seat `BOARD_SIZE` (pins first; default 6) |
 | `GET \| POST /api/ciba` | host | Board status; manual start if Google/board lagged |
 | `POST /api/ciba/poll` | host | Tick due `/oauth/token` per `auth_req_id` |
 | `GET /api/connection-status` | host | Token Vault Google connected? |
@@ -114,8 +113,8 @@ app/            pages + route handlers
 components/     client components (chat, join, host, board) + shadcn/ui
 lib/agent/      system prompt, tool definitions, the tool loop
 lib/ciba.ts     /bc-authorize + CIBA token poll (not @auth0/ai)
-lib/board.ts    joiners + pick (saved size)
-lib/board-config.ts  host-saved board size / yes threshold (defaults 6 / 3)
+lib/board.ts    joiners + pick (`BOARD_SIZE`)
+lib/board-config.ts  BOARD_SIZE / CIBA_YES_THRESHOLD (defaults 6 / 3, runtime env)
 lib/claims.ts   claim SQL
 lib/auth0.ts    Auth0 client, Token Vault connect-account
 db/schema.sql   claims / messages / likes / joiners / board / ciba
@@ -158,17 +157,18 @@ Full environment and database setup: **[SETUP.md](SETUP.md)**.
 
 ## Rehearsal mode (no six Auth0 accounts)
 
-Stage defaults stay **pick 6 / 3 yeses**. Focus sets the live values on
-**`/host` → Board rules** (board size and CIBA yes threshold). Those persist
-in Neon `demo_settings` — not env, not a code flag. For a two-person Oktane
-rehearsal, set size **2** and threshold **2** (both seated members must Accept),
-then Save. Do not hardcode the stage demo to 2.
+Stage defaults stay **pick 6 / 3 yeses**. There is no code-level rehearsal
+flag. Focus sets these in `.env.local` or Vercel and restarts / redeploys:
 
-The host console shows `N/{size}` and Pick stays disabled until verified
-(non-host) joiners reach that size. CIBA start refuses a seated board that is
-not exactly the saved size. The host Token Vault calendar write and
-`claim.status = approved` fire only after yeses reach the saved threshold.
-Impossible pairs (threshold 3 with size 2) are rejected.
+```dotenv
+BOARD_SIZE=2
+CIBA_YES_THRESHOLD=2
+```
+
+Do not hardcode the stage demo to 2. The host console and every gate (pick,
+CIBA start, yes threshold, `N/{BOARD_SIZE}` copy) read the env values at
+runtime. Both seated members must Accept. The host Token Vault calendar write
+and `claim.status = approved` fire only after yeses reach `CIBA_YES_THRESHOLD`.
 
 ## Running the demo on stage
 

@@ -34,7 +34,7 @@ type SessionUser = { sub?: string; email?: string | null }
  * When a claim flips to awaiting_approval, email the seated board — not
  * the whole room. Refuses to send if the host has not connected Google
  * (hollow approval otherwise) or if the seated board is not exactly
- * the saved board size (empty or leftover short pick).
+ * BOARD_SIZE (empty or leftover short pick).
  */
 export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaStartResult> {
   if (await hasCibaStarted(claimId)) {
@@ -99,8 +99,8 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
 }
 
 /**
- * Poll due pending auth_req_ids only. The host-saved yes threshold
- * (stage default 3) releases the claim, then write one event on the
+ * Poll due pending auth_req_ids only. CIBA_YES_THRESHOLD yeses
+ * (stage default 3) release the claim, then write one event on the
  * host's Google Calendar via Token Vault — and only if this session
  * is the configured host.
  */

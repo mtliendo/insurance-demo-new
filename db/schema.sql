@@ -61,22 +61,6 @@ create table if not exists demo_joiners (
 
 create index if not exists demo_joiners_joined_at_idx on demo_joiners (joined_at desc);
 
--- Host-set board size and CIBA yes threshold. Singleton row.
--- Stage default is 6 / 3; Focus sets 2 / 2 on /host for rehearsal.
-create table if not exists demo_settings (
-  singleton     boolean     primary key default true check (singleton),
-  board_size    integer     not null default 6
-                  check (board_size >= 1 and board_size <= 24),
-  yes_threshold integer     not null default 3
-                  check (yes_threshold >= 1 and yes_threshold <= board_size),
-  updated_at    timestamptz not null default now(),
-  updated_by    text
-);
-
-insert into demo_settings (singleton, board_size, yes_threshold)
-values (true, 6, 3)
-on conflict (singleton) do nothing;
-
 -- One row per "Pick board" tap. The latest pick is the live board.
 create table if not exists board_picks (
   id         uuid        primary key default gen_random_uuid(),

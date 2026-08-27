@@ -129,7 +129,7 @@ export function eligibleJoiners(joiners: Joiner[]): Joiner[] {
 }
 
 /**
- * Randomly select the saved board size of verified joiners (stage default 6).
+ * Randomly select BOARD_SIZE verified joiners (stage default 6).
  * Pinned rows (planted friends) are always included first; the rest
  * of the seats are shuffled in. The host is never seated — they file
  * the claim, they don't CIBA it.
