@@ -74,9 +74,9 @@ export function FileClaimClient({
   }, [startClaim])
 
   /**
-   * Polling stands in for the AppSync Events subscription. Once the agent has
-   * submitted the claim, the audience approves it from /approve and the count
-   * lands in Neon; this loop is how the page learns about it.
+   * Polling stands in for the AppSync Events subscription. Once the agent
+   * has submitted the claim, CIBA yeses land in Neon; this loop is how
+   * the page learns about it.
    */
   const status = snapshot?.claim.status
   const claimId = snapshot?.claim.id
@@ -212,8 +212,8 @@ export function FileClaimClient({
             <CardContent className="flex flex-col items-center gap-5">
               <p className="text-center text-sm text-muted-foreground">
                 {claim.calendarEventId
-                  ? 'Token Vault wrote the event on the operator calendar. The room likes ticker was never the grant.'
-                  : 'The seated board authorized this claim over CIBA email. The room likes ticker was never the grant.'}
+                  ? 'Token Vault wrote the event on the operator calendar.'
+                  : 'The seated board authorized this claim over CIBA email.'}
               </p>
               <Button onClick={() => setShowApprovalModal(false)} className="w-full">
                 Acknowledge

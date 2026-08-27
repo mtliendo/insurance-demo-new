@@ -115,10 +115,12 @@ the current session `sub` to match `DEMO_HOST_SUB` when that env is set.
 
 ### Board size and CIBA yes threshold
 
-Stage defaults stay **pick 6 / 3 yeses**. Focus changes them on **`/host` →
-Board rules**. The values persist in Neon `demo_settings` (not env). Rehearsal
-is size 2 / threshold 2 — both seated members must CIBA-yes. Do not hardcode
-the stage demo to 2. Threshold must be ≥ 1 and ≤ board size.
+Code and seed default is **pick 1 / 1 yes**. Focus raises them on **`/host` →
+Board rules** for the stage talk (typically 6 / 3). The values persist in
+Neon `demo_settings` (not env). An existing singleton row is rewritten to
+1 / 1 once (`defaults_version`) so a live DB does not keep the old 6 / 3
+seed on first load; a later host save of 6 / 3 is kept. Threshold must be
+≥ 1 and ≤ board size.
 
 The host console shows `N/{size}` and disables Pick until verified (non-host)
 joiners ≥ the saved size. `POST /api/board/pick` rejects a short room. CIBA
@@ -147,7 +149,7 @@ email or they cannot sit on the board.
 
 ### Token Vault — host Google Calendar only
 
-The six board members do **not** connect Google. Only the host (Focus) does,
+Board members do **not** connect Google. Only the host (Focus) does,
 once, on `/settings`.
 
 Follow the pattern in
@@ -162,7 +164,7 @@ Follow the pattern in
    Calendar is host-only `/auth/connect`.
 4. Host clicks **Connect Google Calendar** → `/auth/connect` (proxy-gated to
    the host) with `scopes=https://www.googleapis.com/auth/calendar`.
-5. After three CIBA yeses the **host session** calls
+5. After CIBA yeses hit the saved threshold the **host session** calls
    `auth0.getAccessTokenForConnection({ connection: 'google-oauth2' })` and
    writes Calendar REST ([lib/google-calendar.ts](lib/google-calendar.ts)).
    A non-host poller does not write. There is no public `POST /api/calendar`.
@@ -210,11 +212,11 @@ psql "$DATABASE_URL" -f db/schema.sql
 | ----- | -------- | ---- |
 | `claims` | DynamoDB `claims` | One row per claim; `status` drives the whole demo. CIBA start freezes `ciba_board_size` / `ciba_yes_threshold`. |
 | `messages` | DynamoDB `messages` | Chat transcript, so a refresh resumes the claim |
-| `claim_approvals` | AppSync `CLAIM_APPROVAL` events | Public likes ticker — not the grant |
+| `claim_approvals` | AppSync `CLAIM_APPROVAL` events | Unused leftover; cascades on claim delete |
 | `demo_joiners` | — | QR joiners (`sub`, email, name, verified, pinned) |
-| `board_picks` / `board_members` | — | Latest pick of 6 |
-| `ciba_authorizations` | anonymous 3-of-4 | `{authReqId, sub, email, name, status}` per seat |
-| `demo_settings` | — | Host-saved board size and CIBA yes threshold (default 6 / 3) |
+| `board_picks` / `board_members` | — | Latest pick of the saved size |
+| `ciba_authorizations` | — | `{authReqId, sub, email, name, status}` per seat |
+| `demo_settings` | — | Host-saved board size and CIBA yes threshold (default 1 / 1) |
 
 ---
 
@@ -255,10 +257,10 @@ Then walk the happy path:
    agent starts CIBA for the seated board (`publish_claim_submission` →
    `startCibaForSubmittedClaim`, same grant as `POST /api/ciba`). If start is
    blocked (no Google, no/short board, already live), the agent says so in
-   chat. Host **Send CIBA** is a fallback. Six emails go out
-   (`requested_expiry=600`). The projector ticks as they Accept.
-6. Three yeses → claim `approved`, confetti, calendar event on the host Google
-   account. `/approve` likes do **not** release the claim.
+   chat. Host **Send CIBA** is a fallback. Emails go out to the seated
+   board (`requested_expiry=600`). The projector ticks as they Accept.
+6. Yeses ≥ the saved threshold → claim `approved`, confetti, calendar event
+   on the host Google account. CIBA board yeses are the grant.
 
 ### Troubleshooting
 
@@ -270,24 +272,26 @@ Then walk the happy path:
 | Sign-in works but every page 401s | App created as a SPA — recreate it as a Regular Web Application |
 | Agent replies "Sorry, I encountered an error" | Bad or unfunded `ANTHROPIC_API_KEY`; check the server log for `Agent error:` |
 | `relation "claims" does not exist` | Step 2's migration never ran against the branch this `DATABASE_URL` points at |
-| Approvals never release the claim | `/approve` likes are not the grant — need the host-saved yes threshold (default 3) from the seated board (default 6) |
+| Approvals never release the claim | Need the host-saved yes threshold (default 1) from the seated board (default 1). Raise both on `/host` for the talk. |
 | Host console 503 / nobody is host | `DEMO_HOST_EMAIL` and `DEMO_HOST_SUB` are both empty — the gate fails closed |
 | CIBA emails never send | Host has not connected Google, no board picked, or `requested_expiry` is ≤300 (Guardian) |
 | Auth0 `slow_down` on stage | Polls must honor stored `interval_sec` (floor 5). Do not reset after `authorization_pending`. |
 | Board member missing from pick | Email not verified on the Auth0 user, or they are the configured host |
-| Calendar event missing after 3 yeses | Token Vault Google connection dropped; reconnect on `/settings` |
+| Calendar event missing after the threshold yeses | Token Vault Google connection dropped; reconnect on `/settings` |
 
 ---
 
 ## Reset between demos
 
 **Start over (host only).** On `/file-claim` or `/host`, Focus taps **Start
-over** and confirms. That deletes the in-flight claim — `awaiting_approval`
-or `approved` without a calendar event, plus the host's latest unapproved
-chat — and cascades its `messages`, `ciba_authorizations`, and
-`claim_approvals`. Joiners, the seated board, `demo_settings`, Token Vault /
-Google, and Auth0 users stay. Audience, joiners, and the seated board cannot
-call this; `POST /api/claims/reset` is host-gated.
+over** and confirms. That deletes the claim the projector is showing —
+every `awaiting_approval` or `approved` row, **including approved +
+`calendar_event_id`** — plus the host's latest unapproved chat. Cascades
+`messages`, `ciba_authorizations`, and leftover `claim_approvals`. Does
+**not** delete the Google Calendar event. Joiners, the seated board,
+`demo_settings`, Token Vault / Google, and Auth0 users stay. Audience,
+joiners, and the seated board cannot call this; `POST /api/claims/reset`
+is host-gated.
 
 **Full room wipe** (joiners and board too) via Neon MCP `run_sql`, or:
 

@@ -23,9 +23,9 @@ export async function proxy(request: NextRequest) {
   // Auth0 SDK routes.
   if (pathname.startsWith('/auth')) return authRes
 
-  // Public: landing, likes ticker, and /join (QR + audience auth errors).
+  // Public: landing and /join (QR + audience auth errors).
   // /host and /settings still require a session.
-  if (pathname === '/' || pathname === '/join' || pathname.startsWith('/approve')) {
+  if (pathname === '/' || pathname === '/join') {
     return authRes
   }
 

@@ -1,7 +1,7 @@
 import { getCurrentBoard } from '@/lib/board'
 import { boardRulesForClaim } from '@/lib/board-config'
 import { listCibaForClaim, toCibaMember } from '@/lib/ciba-store'
-import { getApprovalCount, listMessages } from '@/lib/claims'
+import { listMessages } from '@/lib/claims'
 import { isGoogleConnected } from '@/lib/google'
 import type { CibaBoardSnapshot, Claim, ClaimSnapshot } from '@/lib/types'
 
@@ -39,9 +39,8 @@ export async function getCibaBoardSnapshot(claim: Claim): Promise<CibaBoardSnaps
 }
 
 export async function buildClaimSnapshot(claim: Claim): Promise<ClaimSnapshot> {
-  const [messages, likeCount, board, googleConnected] = await Promise.all([
+  const [messages, board, googleConnected] = await Promise.all([
     listMessages(claim.id),
-    getApprovalCount(claim.id),
     getCibaBoardSnapshot(claim),
     isGoogleConnected(),
   ])
@@ -49,7 +48,6 @@ export async function buildClaimSnapshot(claim: Claim): Promise<ClaimSnapshot> {
   return {
     claim,
     messages,
-    likeCount,
     approvalCount: board.approvedCount,
     board,
     googleConnected,

@@ -4,7 +4,8 @@ import { clearCurrentClaims } from '@/lib/claims'
 
 /**
  * Host-only rehearsal reset. Audience / joiners / the seated board get 403.
- * Wipes the in-flight claim and cascaded chat / CIBA / likes — not the room.
+ * Wipes the projector claim (including approved + calendar written)
+ * and cascaded chat / CIBA — not the room, board, or Google event.
  */
 export async function POST() {
   const auth = await requireHostSession()

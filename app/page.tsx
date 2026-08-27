@@ -419,7 +419,7 @@ export default function Home() {
                 Something super happened to your car?
               </h2>
               <p className="relative mx-auto mt-3 max-w-lg text-muted-foreground">
-                Our AI claims assistant takes the report, and a seated CIBA board of six
+                Our AI claims assistant takes the report, and a seated CIBA board
                 clears it over email while you watch.
               </p>
               <div className="relative mt-8 flex justify-center">
