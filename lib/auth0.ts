@@ -3,6 +3,13 @@ import { NextResponse } from 'next/server'
 
 export const LOGIN_SCOPES = 'openid profile email offline_access'
 
+export const POLICY_ID_CLAIM = 'https://claims.interview-demo.com/policyId'
+
+export function policyIdFromUser(user: Record<string, unknown>): string | null {
+  const value = user[POLICY_ID_CLAIM]
+  return typeof value === 'string' && value ? value : null
+}
+
 export const auth0 = new Auth0Client({
   domain: process.env.AUTH0_DOMAIN!,
   clientId: process.env.AUTH0_CLIENT_ID!,

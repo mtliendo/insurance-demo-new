@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { emailVerifiedFromUser } from '@/lib/auth0'
 import { requireSession } from '@/lib/api-auth'
 import { getJoiner, isOnCurrentBoard, upsertJoiner } from '@/lib/board'
-import { getBoardSize } from '@/lib/board-config'
+import { getBoardSettings } from '@/lib/board-config'
 import { getCibaForSub } from '@/lib/ciba-store'
 import { getLatestSubmittedClaim } from '@/lib/claims'
 import { isDemoHost, isHostIdentity } from '@/lib/host'
@@ -15,14 +15,17 @@ export async function GET() {
   const joiner = await getJoiner(user.sub)
   const onBoard = await isOnCurrentBoard(user.sub)
   const claim = await getLatestSubmittedClaim()
-  const ciba = claim ? await getCibaForSub(claim.id, user.sub) : null
+  const [ciba, settings] = await Promise.all([
+    claim ? getCibaForSub(claim.id, user.sub) : Promise.resolve(null),
+    getBoardSettings(),
+  ])
 
   return NextResponse.json({
     host: isDemoHost(user),
     joiner,
     onBoard,
     emailVerified: emailVerifiedFromUser(user),
-    boardSize: getBoardSize(),
+    boardSize: settings.boardSize,
     claimStatus: claim?.status ?? null,
     ciba: ciba
       ? { status: ciba.status, bindingMessage: ciba.binding_message, error: ciba.error }
@@ -40,12 +43,13 @@ export async function POST() {
   const emailVerified = emailVerifiedFromUser(user)
 
   if (isHostIdentity(user.sub, email)) {
+    const settings = await getBoardSettings()
     return NextResponse.json({
       host: true,
       joiner: null,
       onBoard: false,
       emailVerified,
-      boardSize: getBoardSize(),
+      boardSize: settings.boardSize,
       skipped: 'host',
     })
   }
@@ -66,6 +70,6 @@ export async function POST() {
     joiner,
     onBoard: await isOnCurrentBoard(user.sub),
     emailVerified,
-    boardSize: getBoardSize(),
+    boardSize: (await getBoardSettings()).boardSize,
   })
 }

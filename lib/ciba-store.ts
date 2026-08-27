@@ -1,4 +1,3 @@
-import { getCibaYesThreshold } from '@/lib/board-config'
 import { sql } from '@/lib/db'
 import { CIBA_INTERVAL_FLOOR, isPollDue } from '@/lib/ciba-interval'
 import type { CibaBoardMember, CibaStatus } from '@/lib/types'
@@ -143,6 +142,6 @@ export async function countCibaApproved(claimId: string): Promise<number> {
   return rows[0]?.count ?? 0
 }
 
-export function cibaMetThreshold(approvedCount: number): boolean {
-  return approvedCount >= getCibaYesThreshold()
+export function cibaMetThreshold(approvedCount: number, yesThreshold: number): boolean {
+  return approvedCount >= yesThreshold
 }

@@ -56,12 +56,12 @@ export interface ClaimSnapshot {
 
 /**
  * Stage defaults for the CIBA board. Live size and yes-threshold are
- * env-driven (`BOARD_SIZE`, `CIBA_YES_THRESHOLD`) via lib/board-config.ts.
- * Clients must read the values from the API / claim snapshot — do not
- * import process.env here (this module is shared with client components).
+ * stored in demo_settings and edited on /host. Clients must read the
+ * values from the API / claim snapshot.
  */
 export const DEFAULT_BOARD_SIZE = 6
 export const DEFAULT_CIBA_YES_THRESHOLD = 3
+export const MAX_BOARD_SIZE = 24
 
 /** Kept for the public likes ticker on /approve. Not the authorization path. */
 export const TOTAL_APPROVERS = 4

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth0, generatePolicyId } from '@/lib/auth0'
+import { auth0, generatePolicyId, policyIdFromUser } from '@/lib/auth0'
 import { addMessage, createClaim, getLatestClaimForUser } from '@/lib/claims'
 import { buildClaimSnapshot } from '@/lib/snapshot'
 import type { ClaimSnapshot } from '@/lib/types'
@@ -32,7 +32,7 @@ export async function POST() {
   }
 
   // Prefer the namespaced claim the Auth0 Action adds; fall back if it isn't set up.
-  const policyId = generatePolicyId()
+  const policyId = policyIdFromUser(session.user) ?? generatePolicyId()
   const claim = await createClaim(userId, policyId)
 
   const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]

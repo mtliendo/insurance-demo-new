@@ -5,7 +5,7 @@ import { hasLiveCiba } from '@/lib/ciba-store'
 import { pollCibaForClaim } from '@/lib/ciba-flow'
 import { getLatestSubmittedClaim } from '@/lib/claims'
 import { isGoogleConnected } from '@/lib/google'
-import { getBoardSize, getCibaYesThreshold } from '@/lib/board-config'
+import { getBoardSettings } from '@/lib/board-config'
 import { getCibaBoardSnapshot } from '@/lib/snapshot'
 
 export async function GET() {
@@ -17,18 +17,19 @@ export async function GET() {
     claim = (await pollCibaForClaim(claim.id, auth.session.user)) ?? claim
   }
 
-  const [joiners, board, googleConnected, liveCiba] = await Promise.all([
+  const [joiners, board, googleConnected, liveCiba, settings] = await Promise.all([
     listJoiners(),
     getCurrentBoard(),
     isGoogleConnected(),
     hasLiveCiba(),
+    getBoardSettings(),
   ])
 
   return NextResponse.json({
     joiners,
     board,
-    boardSize: getBoardSize(),
-    yesThreshold: getCibaYesThreshold(),
+    boardSize: settings.boardSize,
+    yesThreshold: settings.yesThreshold,
     verifiedCount: eligibleJoiners(joiners).length,
     canPick: !liveCiba,
     googleConnected,
