@@ -7,30 +7,52 @@ import { getCibaForSub } from '@/lib/ciba-store'
 import { getLatestSubmittedClaim } from '@/lib/claims'
 import { isDemoHost, isHostIdentity } from '@/lib/host'
 
-export async function GET() {
-  const auth = await requireSession()
-  if ('error' in auth) return auth.error
+export const dynamic = 'force-dynamic'
 
-  const { user } = auth.session
-  const joiner = await getJoiner(user.sub)
-  const onBoard = await isOnCurrentBoard(user.sub)
+const NO_STORE = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
+}
+
+type SessionUser = {
+  sub: string
+  email?: string | null
+  name?: string | null
+}
+
+async function joinPayload(
+  user: SessionUser,
+  extra?: { joiner?: unknown; skipped?: string },
+) {
+  const email = typeof user.email === 'string' ? user.email : ''
+  const joiner = extra && 'joiner' in extra ? extra.joiner : await getJoiner(user.sub)
+  const onBoard = extra?.skipped === 'host' ? false : await isOnCurrentBoard(user.sub, email)
   const claim = await getLatestSubmittedClaim()
   const [ciba, settings] = await Promise.all([
-    claim ? getCibaForSub(claim.id, user.sub) : Promise.resolve(null),
+    claim && extra?.skipped !== 'host'
+      ? getCibaForSub(claim.id, user.sub)
+      : Promise.resolve(null),
     getBoardSettings(),
   ])
 
-  return NextResponse.json({
+  return {
     host: isDemoHost(user),
-    joiner,
+    joiner: joiner ?? null,
     onBoard,
-    emailVerified: emailVerifiedFromUser(user),
+    emailVerified: emailVerifiedFromUser(user as Record<string, unknown>),
     boardSize: settings.boardSize,
     claimStatus: claim?.status ?? null,
     ciba: ciba
       ? { status: ciba.status, bindingMessage: ciba.binding_message, error: ciba.error }
       : null,
-  })
+    ...(extra?.skipped ? { skipped: extra.skipped } : {}),
+  }
+}
+
+export async function GET() {
+  const auth = await requireSession()
+  if ('error' in auth) return auth.error
+
+  return NextResponse.json(await joinPayload(auth.session.user), { headers: NO_STORE })
 }
 
 export async function POST() {
@@ -43,14 +65,8 @@ export async function POST() {
   const emailVerified = emailVerifiedFromUser(user)
 
   if (isHostIdentity(user.sub, email)) {
-    const settings = await getBoardSettings()
-    return NextResponse.json({
-      host: true,
-      joiner: null,
-      onBoard: false,
-      emailVerified,
-      boardSize: settings.boardSize,
-      skipped: 'host',
+    return NextResponse.json(await joinPayload(user, { joiner: null, skipped: 'host' }), {
+      headers: NO_STORE,
     })
   }
 
@@ -65,11 +81,5 @@ export async function POST() {
     emailVerified,
   })
 
-  return NextResponse.json({
-    host: false,
-    joiner,
-    onBoard: await isOnCurrentBoard(user.sub),
-    emailVerified,
-    boardSize: (await getBoardSettings()).boardSize,
-  })
+  return NextResponse.json(await joinPayload(user, { joiner }), { headers: NO_STORE })
 }

@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
 import { requireHostSession } from '@/lib/api-auth'
 import { pickBoard } from '@/lib/board'
-import { hasCibaCatchUpLock } from '@/lib/board-config'
+import { hasLiveCiba } from '@/lib/ciba-store'
 
 export async function POST() {
   const auth = await requireHostSession()
   if ('error' in auth) return auth.error
 
-  if (await hasCibaCatchUpLock()) {
+  if (await hasLiveCiba()) {
     return NextResponse.json(
-      { error: 'A claim is in CIBA or waiting on the calendar write. Start over before picking again.' },
+      { error: 'CIBA emails are already out. Start over before picking again.' },
       { status: 409 },
     )
   }
