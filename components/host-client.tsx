@@ -196,8 +196,13 @@ export function HostClient({
     blockReason === 'no_google' ||
     blockReason === 'no_board' ||
     auth0StartFailed
+  const cibaAlreadyLive =
+    Boolean(state?.claim?.board.started) &&
+    members.some(
+      (m) => m.status === 'pending' || m.status === 'approved' || m.status === 'denied',
+    )
   const showSendCiba =
-    state?.claim?.status === 'awaiting_approval' && autoStartFailed
+    state?.claim?.status === 'awaiting_approval' && autoStartFailed && !cibaAlreadyLive
   const failReason =
     autoStart && !autoStart.ok
       ? autoStart.reason
