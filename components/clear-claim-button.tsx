@@ -5,7 +5,7 @@ import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const CONFIRM =
-  'Start over? This deletes the current claim — including an approved claim with a calendar event — plus its chat and CIBA votes. Joiners, the seated board, board rules, and Google Calendar stay.'
+  'Start over? This deletes the current claim — including an approved claim with a calendar event — plus its chat, CIBA votes, and the seated board. Joiners, board rules, and Google Calendar stay.'
 
 export function ClearClaimButton({
   onCleared,

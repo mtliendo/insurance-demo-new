@@ -1,3 +1,4 @@
+import { clearSeatedBoard } from '@/lib/board'
 import { ensureBoardRulesSchema } from '@/lib/board-config'
 import { sql } from '@/lib/db'
 import type { ChatMessage, CibaBlockReason, Claim, ClaimStatus } from '@/lib/types'
@@ -185,12 +186,13 @@ export type ClearedClaim = {
 /**
  * Host rehearsal reset. Deletes the claim the /host projector shows —
  * every `awaiting_approval` or `approved` row, including approved +
- * `calendar_event_id` — plus the host's latest unapproved chat.
- * `messages`, `ciba_authorizations`, and leftover `claim_approvals`
- * cascade from `claims`. Does not delete the Google Calendar event.
+ * `calendar_event_id` — plus the host's latest unapproved chat, and
+ * the seated board (`board_picks` / `board_members`). Leftover host
+ * seats are why CIBA mailed the operator. `messages`,
+ * `ciba_authorizations`, and leftover `claim_approvals` cascade from
+ * `claims`. Does not delete the Google Calendar event.
  *
- * Does not touch demo_joiners, board_picks / board_members,
- * demo_settings, Token Vault, or Auth0 users.
+ * Does not touch demo_joiners, demo_settings, Token Vault, or Auth0 users.
  */
 export async function clearCurrentClaims(hostUserId: string): Promise<ClearedClaim[]> {
   await ensureBoardRulesSchema()
@@ -222,5 +224,7 @@ export async function clearCurrentClaims(hostUserId: string): Promise<ClearedCla
     `) as { id: string; status: ClaimStatus }[]
     if (rows[0]) deleted.push({ id: rows[0].id, status: rows[0].status })
   }
+
+  await clearSeatedBoard()
   return deleted
 }

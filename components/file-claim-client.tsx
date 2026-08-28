@@ -203,17 +203,15 @@ export function FileClaimClient({
               <span className="hud-label text-stone-time">Claim cleared</span>
               <CardTitle className="mt-2 text-2xl uppercase">Claim Approved</CardTitle>
               <CardDescription className="text-base">
-                The CIBA board of {board.boardSize} hit {board.requiredApprovals}{' '}
-                email yes{board.requiredApprovals === 1 ? '' : 'es'}. The claim is
-                released
-                {claim.calendarEventId ? ' and written to the host calendar.' : '.'}
+                Your claim was approved
+                {claim.calendarEventId ? " — it's on the calendar." : '.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-5">
               <p className="text-center text-sm text-muted-foreground">
                 {claim.calendarEventId
-                  ? 'Token Vault wrote the event on the operator calendar.'
-                  : 'The seated board authorized this claim over CIBA email.'}
+                  ? "We've added this to the calendar."
+                  : 'You are covered. We will follow up if we need anything else.'}
               </p>
               <Button onClick={() => setShowApprovalModal(false)} className="w-full">
                 Acknowledge
@@ -406,11 +404,11 @@ export function FileClaimClient({
                   <div className="animate-fade-in mt-3 space-y-2 text-sm text-stone-time">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4" />
-                      Cleared by the CIBA board
+                      Your claim was approved
                     </div>
                     {claim.calendarEventId && (
                       <p className="text-xs text-muted-foreground">
-                        Calendar event written on the host account.
+                        It&apos;s on the calendar.
                       </p>
                     )}
                   </div>

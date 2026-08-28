@@ -59,27 +59,32 @@ export function JoinClient({
 
   useEffect(() => {
     let active = true
-    let seated = false
+    let joined = false
+
+    const apply = (next: JoinState) => {
+      if (!active) return
+      setState(next)
+      setError(null)
+    }
 
     const read = async () => {
-      const res = await fetch('/api/join', { cache: 'no-store' })
+      const res = await fetch(`/api/join?ts=${Date.now()}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`Status ${res.status}`)
-      const next = (await res.json()) as JoinState
-      if (active) {
-        setState(next)
-        setError(null)
-      }
+      apply((await res.json()) as JoinState)
     }
 
     const tick = async () => {
       try {
-        if (!seated) {
-          const joined = await fetch('/api/join', { method: 'POST' })
-          if (!joined.ok && joined.status !== 409) {
-            const body = await joined.json().catch(() => ({}))
-            throw new Error(body.error || `Join failed (${joined.status})`)
+        if (!joined) {
+          const posted = await fetch('/api/join', { method: 'POST', cache: 'no-store' })
+          if (!posted.ok && posted.status !== 409) {
+            const body = await posted.json().catch(() => ({}))
+            throw new Error(body.error || `Join failed (${posted.status})`)
           }
-          seated = true
+          if (posted.ok) {
+            apply((await posted.json()) as JoinState)
+          }
+          joined = true
         }
         await read()
       } catch (err) {

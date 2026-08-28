@@ -123,10 +123,12 @@ seed on first load; a later host save of 6 / 3 is kept. Threshold must be
 ≥ 1 and ≤ board size.
 
 The host console shows `N/{size}` and disables Pick until verified (non-host)
-joiners ≥ the saved size. `POST /api/board/pick` rejects a short room. CIBA
-start refuses a seated board that is not exactly the saved size. Calendar
-write and `claim.status = approved` fire only after yeses ≥ the saved
-threshold.
+joiners ≥ the saved size. The configured host (`DEMO_HOST_EMAIL` / `DEMO_HOST_SUB`)
+is never seated. `POST /api/board/pick` replaces the current board until CIBA
+is live and rejects a short room. CIBA start emails only seated joiner `sub`s
+(`login_hint` `iss_sub`) and refuses a board that is empty, host-only, or not
+exactly the saved size. Calendar write and `claim.status = approved` fire only
+after yeses ≥ the saved threshold.
 
 ### CIBA email grant
 
@@ -252,7 +254,8 @@ Then walk the happy path:
    emails are withheld.
 3. `/host` → QR is on screen. A second browser opens `/join`, logs in with a
    **verified** email, and waits.
-4. **Pick board.** The joiner phone shows "you're on the board."
+4. **Pick board.** Pick replaces the current board until CIBA is live.
+   The joiner phone shows "you're on the board." The host is never seated.
 5. `/file-claim` → describe the Hulk incident. Confirm submission. The claims
    agent starts CIBA for the seated board (`publish_claim_submission` →
    `startCibaForSubmittedClaim`, same grant as `POST /api/ciba`). If start is
@@ -274,7 +277,8 @@ Then walk the happy path:
 | `relation "claims" does not exist` | Step 2's migration never ran against the branch this `DATABASE_URL` points at |
 | Approvals never release the claim | Need the host-saved yes threshold (default 1) from the seated board (default 1). Raise both on `/host` for the talk. |
 | Host console 503 / nobody is host | `DEMO_HOST_EMAIL` and `DEMO_HOST_SUB` are both empty — the gate fails closed |
-| CIBA emails never send | Host has not connected Google, no board picked, or `requested_expiry` is ≤300 (Guardian) |
+| CIBA emails never send | Host has not connected Google, no board picked, leftover host-only seat, or `requested_expiry` is ≤300 (Guardian) |
+| CIBA emailed the operator | Leftover `board_members` row for `DEMO_HOST`; Start over now clears the seated board. Pick replaces until CIBA is live. |
 | Auth0 `slow_down` on stage | Polls must honor stored `interval_sec` (floor 5). Do not reset after `authorization_pending`. |
 | Board member missing from pick | Email not verified on the Auth0 user, or they are the configured host |
 | Calendar event missing after the threshold yeses | Token Vault Google connection dropped; reconnect on `/settings` |
@@ -286,12 +290,13 @@ Then walk the happy path:
 **Start over (host only).** On `/file-claim` or `/host`, Focus taps **Start
 over** and confirms. That deletes the claim the projector is showing —
 every `awaiting_approval` or `approved` row, **including approved +
-`calendar_event_id`** — plus the host's latest unapproved chat. Cascades
-`messages`, `ciba_authorizations`, and leftover `claim_approvals`. Does
-**not** delete the Google Calendar event. Joiners, the seated board,
-`demo_settings`, Token Vault / Google, and Auth0 users stay. Audience,
-joiners, and the seated board cannot call this; `POST /api/claims/reset`
-is host-gated.
+`calendar_event_id`** — plus the host's latest unapproved chat **and
+the seated board** (`board_picks` / `board_members`). Leftover host
+seats are why CIBA mailed the operator. Cascades `messages`,
+`ciba_authorizations`, and leftover `claim_approvals`. Does **not**
+delete the Google Calendar event. Joiners, `demo_settings`, Token Vault
+/ Google, and Auth0 users stay. Audience and joiners cannot call this;
+`POST /api/claims/reset` is host-gated.
 
 **Full room wipe** (joiners and board too) via Neon MCP `run_sql`, or:
 

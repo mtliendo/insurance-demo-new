@@ -1,6 +1,6 @@
 import { getBoardSettings } from '@/lib/board-config'
 import { sql } from '@/lib/db'
-import { isHostIdentity } from '@/lib/host'
+import { hostEmail, hostSub, isHostIdentity } from '@/lib/host'
 
 export type Joiner = {
   sub: string
@@ -92,26 +92,54 @@ export async function getLatestPickId(): Promise<string | null> {
   return rows[0]?.id ?? null
 }
 
+export function withoutHost<T extends { sub: string; email?: string | null }>(
+  members: T[],
+): T[] {
+  return members.filter((m) => !isHostIdentity(m.sub, m.email))
+}
+
+/** Drop leftover operator seats from a pick. Host files the claim; they never CIBA it. */
+async function dropHostSeats(pickId: string): Promise<void> {
+  const sub = hostSub()
+  const email = hostEmail()
+  if (sub) {
+    await sql`delete from board_members where pick_id = ${pickId} and sub = ${sub}`
+  }
+  if (email) {
+    await sql`
+      delete from board_members
+      where pick_id = ${pickId} and lower(email) = ${email}
+    `
+  }
+}
+
 export async function getCurrentBoard(): Promise<BoardMember[]> {
   const pickId = await getLatestPickId()
   if (!pickId) return []
+  await dropHostSeats(pickId)
   const rows = (await sql`
     select sub, email, name from board_members
     where pick_id = ${pickId}
     order by name
   `) as BoardMember[]
-  return rows
+  return withoutHost(rows)
 }
 
-export async function isOnCurrentBoard(sub: string): Promise<boolean> {
-  const pickId = await getLatestPickId()
-  if (!pickId) return false
-  const rows = (await sql`
-    select 1 from board_members
-    where pick_id = ${pickId} and sub = ${sub}
-    limit 1
-  `) as unknown[]
-  return rows.length > 0
+export async function isOnCurrentBoard(
+  sub: string,
+  email?: string | null,
+): Promise<boolean> {
+  if (isHostIdentity(sub, email)) return false
+  const board = await getCurrentBoard()
+  if (board.some((m) => m.sub === sub)) return true
+  const needle = email?.trim().toLowerCase()
+  if (needle && board.some((m) => m.email.toLowerCase() === needle)) return true
+  return false
+}
+
+/** Wipe the seated pick. Joiners, demo_settings, and Token Vault stay. */
+export async function clearSeatedBoard(): Promise<void> {
+  await sql`delete from board_picks`
 }
 
 function shuffle<T>(items: T[]): T[] {
@@ -150,10 +178,10 @@ export async function pickBoard(pickedBy: string): Promise<BoardMember[]> {
       `Need ${size} verified joiners to pick a board. Currently ${eligible.length}.`,
     )
   }
-  const selected = selectBoard(joiners, size)
-  if (selected.length !== size) {
+  const selected = withoutHost(selectBoard(joiners, size))
+  if (selected.length !== size || selected.some((m) => isHostIdentity(m.sub, m.email))) {
     throw new Error(
-      `Need ${size} verified joiners to pick a board. Currently ${selected.length}.`,
+      `Need ${size} verified joiners to pick a board. Currently ${selected.length}. The operator cannot sit.`,
     )
   }
 
@@ -170,6 +198,10 @@ export async function pickBoard(pickedBy: string): Promise<BoardMember[]> {
       values (${pickId}, ${member.sub}, ${member.email}, ${member.name})
     `
   }
+
+  // Replace leftover picks (including a leftover host-only seat) so Pick
+  // is never a no-op when CIBA is not yet live.
+  await sql`delete from board_picks where id <> ${pickId}`
 
   return selected.map(({ sub, email, name }) => ({ sub, email, name }))
 }

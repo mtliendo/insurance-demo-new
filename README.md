@@ -20,15 +20,17 @@ Read that first; nothing here runs without those.
    Login so we have `sub`, email, and name. An unverified email can watch the
    room; it cannot sit on the CIBA board.
 2. **Focus picks the board.** The host console (`/host`) randomly seats the
-   saved board size of verified joiners (default 1; raise to 6 for the talk).
-   Their phones flip to "you're on the board" — app UI, not mail yet. Pick
-   again, or pin planted friends first so they are always included.
+   saved board size of verified (non-host) joiners (default 1; raise to 6
+   for the talk). The operator is never seated. Pick replaces the current
+   board until CIBA is live. Joiner phones flip to "you're on the board"
+   — app UI, not mail yet. Pin planted friends first so they are always included.
 3. **The host files the claim in chat.** `/file-claim` is the same Anthropic
    claims agent as before (white 2006 Honda Pilot, Hulk-smashed car). Confirm
    submission flips the row to `awaiting_approval` and starts CIBA for the
    seated board. If start is blocked, the agent says why in chat.
-4. **CIBA email goes to the seated board, not the room.** If the host has not
-   connected Google Calendar, we refuse to send — a yes would be hollow.
+4. **CIBA email goes to the seated board, not the room, and never the host.**
+   If the host has not connected Google Calendar, we refuse to send — a yes
+   would be hollow. A host-only leftover seat is treated as no board.
    Otherwise we `POST /bc-authorize` per seated member (`login_hint` `iss_sub`,
    `requested_expiry=600` so Auth0 uses **email**, never Guardian push) and
    store `{authReqId, sub, email, name, status}`. The projector ticks as they
@@ -97,7 +99,7 @@ are the SQL surface.
 | `/file-claim` | protected | Chat with the claims agent; live board sidebar |
 | `/profile` | protected | Auth0 profile and the `policyId` custom claim |
 | `POST /api/claims` | protected | Starts or resumes the caller's claim |
-| `POST /api/claims/reset` | host | Wipe projector claim (incl. approved + calendar) + chat / CIBA |
+| `POST /api/claims/reset` | host | Wipe projector claim (incl. approved + calendar) + chat / CIBA + seated board |
 | `GET /api/claims/[id]` | protected | Claim snapshot; host ticks due CIBA ids |
 | `POST /api/claims/[id]/chat` | protected | One agent turn |
 | `GET \| POST /api/join` | login | Upsert joiner; seat / CIBA status for this phone |
@@ -188,7 +190,8 @@ later `/host` save. Board rules stay locked while a claim is
    calendar event lands on the host Google account.
 
 Between runs, Focus taps **Start over** on `/file-claim` or `/host` (host
-only — deletes the projector claim including approved + calendar written;
-keeps the room, board, and Google). A full wipe of joiners and the board
-is still `truncate claims, demo_joiners, board_picks cascade;` (see the
+only — deletes the projector claim including approved + calendar written,
+and clears the seated board so a leftover host seat cannot be CIBA'd;
+keeps joiners, board rules, and Google). A full wipe of joiners is still
+`truncate claims, demo_joiners, board_picks cascade;` (see the
 end of [SETUP.md](SETUP.md)).

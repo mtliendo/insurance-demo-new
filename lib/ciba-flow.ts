@@ -1,4 +1,4 @@
-import { getCurrentBoard } from '@/lib/board'
+import { getCurrentBoard, withoutHost } from '@/lib/board'
 import { bindingMessageForClaim } from '@/lib/binding-message'
 import { pollCiba, startCiba } from '@/lib/ciba'
 import { CIBA_INTERVAL_FLOOR, floorInterval, nextPollInterval } from '@/lib/ciba-interval'
@@ -26,7 +26,7 @@ import {
   getBoardSettings,
   isFullBoard,
 } from '@/lib/board-config'
-import { canWriteHostCalendar, isDemoHost } from '@/lib/host'
+import { canWriteHostCalendar, isDemoHost, isHostIdentity } from '@/lib/host'
 import type { Claim } from '@/lib/types'
 
 export type CibaStartFailReason =
@@ -69,6 +69,7 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
         'Claim is submitted (status awaiting_approval), but CIBA emails were NOT sent.',
         `Auth0 accepted none of the ${result.seated} seated board member(s).`,
         'Tell the filer that in chat. Do not say the board was emailed.',
+        'Do not say the demo is broken. Do not say the operator was emailed.',
         'The host Send CIBA control on /host is a fallback if this was lag.',
       ].join(' ')
     }
@@ -79,7 +80,7 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
       all
         ? 'Thank the user and tell them the seated board was just emailed to review the claim.'
         : 'Tell the filer some seats were emailed and the projector will show any Auth0 errors.',
-      'Do not send them to /host to send mail.',
+      'Do not say the operator was emailed. Do not send them to /host to send mail.',
     ].join(' ')
   }
 
@@ -98,15 +99,19 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
     case 'no_board':
       return [
         prefix,
-        `Reason: no board is seated (need exactly ${result.required ?? 'the saved size'}).`,
-        'Tell the filer that in chat. CIBA mail does not go to the room.',
-        'Host Send CIBA is only a fallback after a board is picked.',
+        `Reason: no eligible board is seated (need exactly ${result.required ?? 'the saved size'}).`,
+        'The operator cannot sit — leftover host-only seats do not count.',
+        'Tell the filer nobody was emailed yet and the operator still needs to pick someone from the room.',
+        'Do not say the demo is broken. Do not say the operator was emailed.',
+        'Host Send CIBA is only a fallback after a joiner is seated.',
       ].join(' ')
     case 'short_board':
       return [
         prefix,
         `Reason: seated board is ${result.seated ?? 0}, required exact size is ${result.required ?? 'unknown'}.`,
+        'The operator cannot sit and is never emailed.',
         'Tell the filer the board is short and emails were not sent.',
+        'Do not say the demo is broken.',
         'Host Send CIBA is only a fallback after a full board is picked.',
       ].join(' ')
     case 'already_started':
@@ -125,9 +130,9 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
 
 /**
  * When a claim flips to awaiting_approval, email the seated board — not
- * the whole room. Refuses to send if the host has not connected Google
- * (hollow approval otherwise) or if the seated board is not exactly
- * the saved board size (empty or leftover short pick).
+ * the whole room, and never the demo host. Refuses to send if the host
+ * has not connected Google (hollow approval otherwise) or if the seated
+ * board is empty, host-only, or not exactly the saved size.
  */
 export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaStartResult> {
   if (await hasCibaStarted(claimId)) {
@@ -149,7 +154,7 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
 
   const live = await getBoardSettings()
   const intended = frozenBoardRules(claim) ?? live
-  const board = await getCurrentBoard()
+  const board = withoutHost(await getCurrentBoard())
   if (!isFullBoard(board.length, intended.boardSize)) {
     await setCibaBlockReason(claimId, 'no_board')
     return boardSizeFail(board.length, intended.boardSize)
@@ -166,6 +171,7 @@ export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaS
   let started = 0
 
   for (const member of board) {
+    if (isHostIdentity(member.sub, member.email)) continue
     try {
       const result = await startCiba(member.sub, bindingMessage)
       const expiresAt = new Date(Date.now() + result.expiresIn * 1000)

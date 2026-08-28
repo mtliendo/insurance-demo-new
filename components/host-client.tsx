@@ -31,6 +31,7 @@ type BoardState = {
   yesThreshold: number
   verifiedCount: number
   canPick: boolean
+  canChangeRules?: boolean
   googleConnected: boolean
   claim: {
     id: string
@@ -61,7 +62,7 @@ export function HostClient({
   const syncedRules = useRef<string | null>(null)
 
   const load = useCallback(async () => {
-    const res = await fetch('/api/board', { cache: 'no-store' })
+    const res = await fetch(`/api/board?ts=${Date.now()}`, { cache: 'no-store' })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
       throw new Error(body.error || `Board ${res.status}`)
@@ -158,7 +159,7 @@ export function HostClient({
   const enoughVerified = verifiedCount >= boardSize
   const pickEnabled = Boolean(state?.canPick) && enoughVerified && !picking
   const fullBoard = (state?.board.length ?? 0) === boardSize
-  const rulesEnabled = Boolean(state?.canPick) && !savingRules
+  const rulesEnabled = Boolean(state?.canChangeRules ?? state?.canPick) && !savingRules
   const rulesInvalid =
     !Number.isInteger(draftSize) ||
     draftSize < 1 ||
@@ -301,7 +302,7 @@ export function HostClient({
                     {MAX_BOARD_SIZE}.
                   </p>
                 )}
-                {state?.canPick === false && (
+                {state?.canChangeRules === false && (
                   <p className="text-xs text-gold">
                     A claim is in CIBA or waiting on the calendar write. Start
                     over before changing board rules.
@@ -370,8 +371,7 @@ export function HostClient({
                 )}
                 {state?.canPick === false && (
                   <p className="text-xs text-gold">
-                    A claim is in CIBA or waiting on the calendar write. Start
-                    over before picking again.
+                    CIBA emails are already out. Start over before picking again.
                   </p>
                 )}
               </CardContent>
