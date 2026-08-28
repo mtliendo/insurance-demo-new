@@ -322,7 +322,7 @@ export function HostClient({
                 <div>
                   <CardTitle className="text-base uppercase">Joiners</CardTitle>
                   <CardDescription>
-                    {verifiedCount}/{boardSize} verified · pin planted friends, then pick
+                    {verifiedCount}/{boardSize} verified · select planted friends, then pick
                   </CardDescription>
                 </div>
                 <Button onClick={() => void pick()} disabled={!pickEnabled}>
@@ -353,7 +353,7 @@ export function HostClient({
                       onClick={() => void pin(joiner.sub, !joiner.pinned)}
                     >
                       {joiner.pinned ? <Pin className="h-3 w-3" /> : <PinOff className="h-3 w-3" />}
-                      {joiner.pinned ? 'Pinned' : 'Pin'}
+                      {joiner.pinned ? 'Deselect' : 'Select'}
                     </Button>
                   </div>
                 ))}
