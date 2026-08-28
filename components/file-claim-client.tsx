@@ -376,16 +376,15 @@ export function FileClaimClient({
 
                 {isAwaiting && !googleConnected && (
                   <p className="mt-3 text-xs text-gold">
-                    Connect Google Calendar on Settings, then confirm send again in
-                    this chat. Approval is hollow without a host calendar. Host Send
-                    CIBA is a fallback.
+                    Waiting on the operator to connect Google Calendar. The host
+                    console starts CIBA automatically once Calendar is live.
                   </p>
                 )}
 
                 {isAwaiting && board.blockReason === 'no_board' && (
                   <p className="mt-3 text-xs text-gold">
-                    Pick a board of {board.boardSize} on the host console, then
-                    confirm send again in this chat. Host Send CIBA is a fallback.
+                    Waiting on a full board of {board.boardSize}. The host console
+                    starts CIBA automatically once someone from the room is seated.
                   </p>
                 )}
 

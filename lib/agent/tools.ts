@@ -49,7 +49,7 @@ export const tools: Anthropic.Tool[] = [
   {
     name: 'publish_claim_submission',
     description:
-      'Submit the claim after the user explicitly confirms they want it sent. Flips the claim to awaiting_approval and starts CIBA email for the seated board (same grant as POST /api/ciba / host Send CIBA). The tool result says whether mail went out or why it did not — tell the user that. Do not claim the board was emailed unless the result says CIBA started.',
+      'Submit the claim after the user explicitly confirms they want it sent. Flips the claim to awaiting_approval. Starts CIBA only from the host session (same grant as POST /api/ciba). A non-host filer gets not_host — the operator console on /host starts CIBA automatically. The tool result says whether mail went out, that the console is starting it, or why it is blocked. Tell the user that. If not_host, say the board is being emailed / it is starting. Do not tell a non-host to click Send CIBA. Do not claim the board was emailed unless the result says CIBA started, is already live, or not_host (console will start it).',
     input_schema: {
       type: 'object',
       properties: {

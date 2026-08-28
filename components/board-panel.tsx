@@ -38,7 +38,7 @@ export function BoardPanel({
             ? remaining > 0
               ? `${remaining} more CIBA approval${remaining > 1 ? 's' : ''} to release`
               : 'Threshold met — releasing…'
-            : 'Emails go out when the claim is submitted.'}
+            : 'Emails go out from the operator console when the claim is submitted.'}
         </p>
       </div>
 

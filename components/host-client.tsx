@@ -13,6 +13,7 @@ import {
   DEFAULT_BOARD_SIZE,
   DEFAULT_CIBA_YES_THRESHOLD,
   MAX_BOARD_SIZE,
+  type CibaAutoStart,
   type CibaBoardSnapshot,
 } from '@/lib/types'
 
@@ -33,6 +34,7 @@ type BoardState = {
   canPick: boolean
   canChangeRules?: boolean
   googleConnected: boolean
+  cibaAutoStart?: CibaAutoStart | null
   claim: {
     id: string
     status: string
@@ -79,7 +81,10 @@ export function HostClient({
 
   useEffect(() => {
     let active = true
-    const tick = () =>
+    let inFlight = false
+    const tick = () => {
+      if (inFlight) return
+      inFlight = true
       load()
         .then(() => {
           if (active) setError(null)
@@ -87,6 +92,10 @@ export function HostClient({
         .catch((err) => {
           if (active) setError(err instanceof Error ? err.message : 'Load failed')
         })
+        .finally(() => {
+          inFlight = false
+        })
+    }
     tick()
     const timer = setInterval(tick, POLL_MS)
     return () => {
@@ -170,11 +179,45 @@ export function HostClient({
   const rulesDirty =
     state != null && (draftSize !== state.boardSize || draftThreshold !== state.yesThreshold)
   const blockReason = state?.claim?.board.blockReason
-  const needsCibaStart =
-    state?.claim?.status === 'awaiting_approval' &&
-    state.claim.board.members.length > 0 &&
-    !state.claim.board.started &&
-    !blockReason
+  const autoStart = state?.cibaAutoStart ?? null
+  const members = state?.claim?.board.members ?? []
+  const auth0StartFailed =
+    (autoStart?.ok === true && autoStart.started === 0) ||
+    Boolean(
+      state?.claim?.board.started &&
+        members.length > 0 &&
+        members.every((m) => m.status === 'error'),
+    )
+  const autoStartFailed =
+    (autoStart != null &&
+      !autoStart.ok &&
+      autoStart.reason !== 'already_started' &&
+      autoStart.reason !== 'not_host') ||
+    blockReason === 'no_google' ||
+    blockReason === 'no_board' ||
+    auth0StartFailed
+  const showSendCiba =
+    state?.claim?.status === 'awaiting_approval' && autoStartFailed
+  const failReason =
+    autoStart && !autoStart.ok
+      ? autoStart.reason
+      : auth0StartFailed
+        ? 'auth0'
+        : blockReason
+  const failWhy =
+    failReason === 'no_google' || blockReason === 'no_google'
+      ? `Claim is waiting. Connect Google Calendar — CIBA starts automatically once it is live.`
+      : failReason === 'short_board'
+        ? `Claim is waiting. Seated board is ${autoStart && !autoStart.ok ? autoStart.seated : members.length}, need exactly ${autoStart && !autoStart.ok ? autoStart.required : boardSize}. Pick a full non-host board.`
+        : failReason === 'no_board' || blockReason === 'no_board'
+          ? `Claim is waiting. Pick a board of ${boardSize}. CIBA starts automatically once a full non-host board is seated.`
+          : failReason === 'auth0'
+            ? `Auth0 did not accept the CIBA grant${
+                members.find((m) => m.error)?.error
+                  ? `: ${members.find((m) => m.error)?.error}`
+                  : '.'
+              }`
+            : null
 
   return (
     <div className="hud-grid relative min-h-screen overflow-hidden p-4 md:p-8">
@@ -186,7 +229,8 @@ export function HostClient({
               CIBA board
             </h1>
             <p className="mt-2 max-w-xl text-muted-foreground">
-              One QR for the room. Pick {boardSize}. File the Hulk claim.{' '}
+              One QR for the room. Pick {boardSize}. File the Hulk claim.
+              CIBA starts from this console automatically.{' '}
               {yesThreshold} email yes{yesThreshold === 1 ? '' : 'es'} release it
               and write your calendar.
             </p>
@@ -401,19 +445,15 @@ export function HostClient({
               </CardHeader>
               <Separator />
               <CardContent className="space-y-4 pt-5">
-                {blockReason === 'no_google' && (
-                  <p className="text-sm text-gold">
-                    Claim is waiting. Connect Google, then send the {boardSize} CIBA
-                    emails.
-                  </p>
+                {showSendCiba && failWhy && (
+                  <p className="text-sm text-gold">{failWhy}</p>
                 )}
-                {blockReason === 'no_board' && (
-                  <p className="text-sm text-gold">
-                    Claim is waiting. Pick a board of {boardSize}, then send CIBA.
-                  </p>
-                )}
-                {(blockReason || needsCibaStart) && state?.googleConnected && (
-                  <Button onClick={() => void startCiba()} disabled={starting || !fullBoard}>
+                {showSendCiba && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void startCiba()}
+                    disabled={starting || !fullBoard || !state?.googleConnected}
+                  >
                     {starting ? 'Sending…' : 'Send CIBA emails'}
                   </Button>
                 )}

@@ -24,10 +24,11 @@ Read that first; nothing here runs without those.
    for the talk). The operator is never seated. Pick replaces the current
    board until CIBA is live. Joiner phones flip to "you're on the board"
    — app UI, not mail yet. Pin planted friends first so they are always included.
-3. **The host files the claim in chat.** `/file-claim` is the same Anthropic
+3. **The filer files the claim in chat.** `/file-claim` is the same Anthropic
    claims agent as before (white 2006 Honda Pilot, Hulk-smashed car). Confirm
-   submission flips the row to `awaiting_approval` and starts CIBA for the
-   seated board. If start is blocked, the agent says why in chat.
+   submission flips the row to `awaiting_approval`. The open `/host` console
+   starts CIBA automatically on its next poll. If start is blocked, the agent
+   says the operator console will start it.
 4. **CIBA email goes to the seated board, not the room, and never the host.**
    If the host has not connected Google Calendar, we refuse to send — a yes
    would be hollow. A host-only leftover seat is treated as no board.
@@ -77,10 +78,11 @@ only — no calendar scope, no `offline_access`. Only the host hits
 [mtliendo/auth0-calendar-workshop](https://github.com/mtliendo/auth0-calendar-workshop).
 
 **The agent.** [lib/agent/](lib/agent/) is unchanged in conversation: same
-system prompt, same three tools. `publish_claim_submission` starts CIBA for
-the seated board (same grant as `POST /api/ciba`) and returns the start
-result so the agent can tell the filer if mail went out or why it did not.
-Host **Send CIBA** stays as a fallback if Google or the board lagged.
+system prompt, same three tools. `publish_claim_submission` flips the claim
+to `awaiting_approval` and calls `startCibaForSubmittedClaim` (host-only).
+A non-host filer gets `not_host`; `GET /api/board` on the open `/host`
+console starts the same grant. Host **Send CIBA** is only a fallback if
+auto-start failed.
 
 **State and realtime.** There is no websocket. `/file-claim` and `/host` refresh
 UI every 2s. Auth0 `/oauth/token` is only hit when a pending `auth_req_id` is
@@ -103,10 +105,10 @@ are the SQL surface.
 | `GET /api/claims/[id]` | protected | Claim snapshot; host ticks due CIBA ids |
 | `POST /api/claims/[id]/chat` | protected | One agent turn |
 | `GET \| POST /api/join` | login | Upsert joiner; seat / CIBA status for this phone |
-| `GET /api/board` | host | Joiners + live board + CIBA snapshot |
+| `GET /api/board` | host | Joiners + live board + CIBA snapshot; auto-starts CIBA for `awaiting_approval` |
 | `POST /api/board/pick` | host | Randomly seat the saved board size (pins first) |
 | `POST /api/board/settings` | host | Save board size and CIBA yes threshold |
-| `GET \| POST /api/ciba` | host | Board status; manual start if Google/board lagged |
+| `GET \| POST /api/ciba` | host | Board status; fallback start if auto-start failed |
 | `POST /api/ciba/poll` | host | Tick due `/oauth/token` per `auth_req_id` |
 | `GET /api/connection-status` | host | Token Vault Google connected? |
 
@@ -182,8 +184,9 @@ later `/host` save. Board rules stay locked while a claim is
 2. Projector on `/host`. Audience scans the QR → Auth0 login → `/join`.
 3. **Pick board.** Seated phones show "you're on the board." Pin friends and
    pick again if you need a ringer.
-4. Host files the Hulk-smashed-car claim on `/file-claim`. Confirm submission —
-   the claims agent starts CIBA. Host **Send CIBA** is only a fallback.
+4. Filer files the Hulk-smashed-car claim on `/file-claim`. Confirm submission.
+   With `/host` open, the host poll starts CIBA. **Send CIBA** is only a
+   fallback if auto-start failed.
 5. CIBA emails go out to the seated board (`requested_expiry=600`). The
    projector ticks pending → approved / denied.
 6. Yeses at the saved threshold approve the claim, confetti fires, and a
