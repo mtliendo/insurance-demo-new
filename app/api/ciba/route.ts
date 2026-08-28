@@ -19,7 +19,7 @@ export async function GET() {
   })
 }
 
-/** Manual start if submit happened before Google was connected or a board was picked. */
+/** Fallback if the /host poll auto-start failed (no Google, no/short board, Auth0). */
 export async function POST() {
   const auth = await requireHostSession()
   if ('error' in auth) return auth.error

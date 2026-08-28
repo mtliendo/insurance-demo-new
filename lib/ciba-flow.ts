@@ -7,6 +7,7 @@ import {
   countCibaApproved,
   duePendingCiba,
   hasCibaStarted,
+  hasLiveCiba,
   insertCibaAuthorization,
   listCibaForClaim,
   updateCibaStatus,
@@ -27,23 +28,10 @@ import {
   isFullBoard,
 } from '@/lib/board-config'
 import { canWriteHostCalendar, isDemoHost, isHostIdentity } from '@/lib/host'
-import type { Claim } from '@/lib/types'
+import type { CibaAutoStart, Claim } from '@/lib/types'
 
-export type CibaStartFailReason =
-  | 'no_google'
-  | 'no_board'
-  | 'short_board'
-  | 'already_started'
-  | 'not_host'
-
-export type CibaStartResult =
-  | { ok: true; started: number; seated: number }
-  | {
-      ok: false
-      reason: CibaStartFailReason
-      seated?: number
-      required?: number
-    }
+export type { CibaAutoStart, CibaStartFailReason } from '@/lib/types'
+export type CibaStartResult = CibaAutoStart
 
 type SessionUser = { sub?: string; email?: string | null }
 
@@ -70,7 +58,7 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
         `Auth0 accepted none of the ${result.seated} seated board member(s).`,
         'Tell the filer that in chat. Do not say the board was emailed.',
         'Do not say the demo is broken. Do not say the operator was emailed.',
-        'The host Send CIBA control on /host is a fallback if this was lag.',
+        'Do not tell the filer to click Send CIBA.',
       ].join(' ')
     }
     const all = result.started === result.seated
@@ -80,7 +68,7 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
       all
         ? 'Thank the user and tell them the seated board was just emailed to review the claim.'
         : 'Tell the filer some seats were emailed and the projector will show any Auth0 errors.',
-      'Do not say the operator was emailed. Do not send them to /host to send mail.',
+      'Do not say the operator was emailed. Do not tell them to click Send CIBA.',
     ].join(' ')
   }
 
@@ -93,8 +81,8 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
         prefix,
         'Reason: host Google Calendar is not connected (Token Vault is host-only; audience never connects Google).',
         'Tell the filer that in chat. A board yes is hollow without a host calendar.',
-        'They should connect Google on Settings, then confirm send again here.',
-        'Host Send CIBA is only a fallback.',
+        'The operator console will start CIBA automatically once Google is connected.',
+        'Do not tell them to go click Send CIBA.',
       ].join(' ')
     case 'no_board':
       return [
@@ -102,8 +90,9 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
         `Reason: no eligible board is seated (need exactly ${result.required ?? 'the saved size'}).`,
         'The operator cannot sit — leftover host-only seats do not count.',
         'Tell the filer nobody was emailed yet and the operator still needs to pick someone from the room.',
+        'The operator console will start CIBA automatically once a full non-host board is seated.',
         'Do not say the demo is broken. Do not say the operator was emailed.',
-        'Host Send CIBA is only a fallback after a joiner is seated.',
+        'Do not tell them to go click Send CIBA.',
       ].join(' ')
     case 'short_board':
       return [
@@ -111,8 +100,9 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
         `Reason: seated board is ${result.seated ?? 0}, required exact size is ${result.required ?? 'unknown'}.`,
         'The operator cannot sit and is never emailed.',
         'Tell the filer the board is short and emails were not sent.',
+        'The operator console will start CIBA automatically once a full board is picked.',
         'Do not say the demo is broken.',
-        'Host Send CIBA is only a fallback after a full board is picked.',
+        'Do not tell them to go click Send CIBA.',
       ].join(' ')
     case 'already_started':
       return [
@@ -121,21 +111,40 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
       ].join(' ')
     case 'not_host':
       return [
-        prefix,
-        'Reason: only the demo host session can start CIBA (host-only Token Vault; audience never connects Google).',
-        'Tell the filer that in chat.',
+        'Claim is submitted (status awaiting_approval).',
+        'This session is not the demo host, so CIBA was not started here (host-only Token Vault).',
+        'The operator console on /host starts CIBA automatically on its next poll — same grant as Send CIBA.',
+        'Tell the filer the seated board is being emailed / it is starting.',
+        'Do not tell them to go click Send CIBA. Do not send them to /host to send mail.',
+        'Do not say the operator was emailed. Do not say the demo is broken.',
       ].join(' ')
   }
 }
 
 /**
+ * Host console poll (`GET /api/board`): start CIBA for an
+ * `awaiting_approval` claim. Same grant as `POST /api/ciba` and the
+ * claims agent. `already_started` / `hasLiveCiba` is a no-op.
+ */
+export async function autoStartCibaFromHostPoll(
+  claim: Claim | null,
+): Promise<CibaStartResult | null> {
+  if (!claim || claim.status !== 'awaiting_approval') return null
+  return startCibaForSubmittedClaim(claim.id)
+}
+
+/**
  * When a claim flips to awaiting_approval, email the seated board — not
- * the whole room, and never the demo host. Refuses to send if the host
- * has not connected Google (hollow approval otherwise) or if the seated
- * board is empty, host-only, or not exactly the saved size.
+ * the whole room, and never the demo host. Host session only. Refuses
+ * to send if the host has not connected Google (hollow approval
+ * otherwise) or if the seated board is empty, host-only, or not
+ * exactly the saved size.
  */
 export async function startCibaForSubmittedClaim(claimId: string): Promise<CibaStartResult> {
   if (await hasCibaStarted(claimId)) {
+    return { ok: false, reason: 'already_started' }
+  }
+  if (await hasLiveCiba()) {
     return { ok: false, reason: 'already_started' }
   }
 

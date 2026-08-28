@@ -256,12 +256,14 @@ Then walk the happy path:
    **verified** email, and waits.
 4. **Pick board.** Pick replaces the current board until CIBA is live.
    The joiner phone shows "you're on the board." The host is never seated.
-5. `/file-claim` → describe the Hulk incident. Confirm submission. The claims
-   agent starts CIBA for the seated board (`publish_claim_submission` →
-   `startCibaForSubmittedClaim`, same grant as `POST /api/ciba`). If start is
-   blocked (no Google, no/short board, already live), the agent says so in
-   chat. Host **Send CIBA** is a fallback. Emails go out to the seated
-   board (`requested_expiry=600`). The projector ticks as they Accept.
+5. `/file-claim` → describe the Hulk incident. Confirm submission. The
+   filer session does not start CIBA (`startCibaForSubmittedClaim`
+   requires the host). With `/host` open, `GET /api/board` calls the same
+   `startCibaForSubmittedClaim` as `POST /api/ciba`. If start is blocked
+   (no Google, no/short board, already live, Auth0), the agent says the
+   operator console will start it. Host **Send CIBA** is only a fallback
+   when auto-start failed. Emails go out to the seated board
+   (`requested_expiry=600`). The projector ticks as they Accept.
 6. Yeses ≥ the saved threshold → claim `approved`, confetti, calendar event
    on the host Google account. CIBA board yeses are the grant.
 
@@ -277,7 +279,7 @@ Then walk the happy path:
 | `relation "claims" does not exist` | Step 2's migration never ran against the branch this `DATABASE_URL` points at |
 | Approvals never release the claim | Need the host-saved yes threshold (default 1) from the seated board (default 1). Raise both on `/host` for the talk. |
 | Host console 503 / nobody is host | `DEMO_HOST_EMAIL` and `DEMO_HOST_SUB` are both empty — the gate fails closed |
-| CIBA emails never send | Host has not connected Google, no board picked, leftover host-only seat, or `requested_expiry` is ≤300 (Guardian) |
+| CIBA emails never send | `/host` is not open (auto-start is the host poll), host has not connected Google, no board picked, leftover host-only seat, or `requested_expiry` is ≤300 (Guardian) |
 | CIBA emailed the operator | Leftover `board_members` row for `DEMO_HOST`; Start over now clears the seated board. Pick replaces until CIBA is live. |
 | Auth0 `slow_down` on stage | Polls must honor stored `interval_sec` (floor 5). Do not reset after `authorization_pending`. |
 | Board member missing from pick | Email not verified on the Auth0 user, or they are the configured host |

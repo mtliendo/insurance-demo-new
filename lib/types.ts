@@ -4,6 +4,22 @@ export type CibaStatus = 'pending' | 'approved' | 'denied' | 'error'
 
 export type CibaBlockReason = 'no_google' | 'no_board'
 
+export type CibaStartFailReason =
+  | 'no_google'
+  | 'no_board'
+  | 'short_board'
+  | 'already_started'
+  | 'not_host'
+
+export type CibaAutoStart =
+  | { ok: true; started: number; seated: number }
+  | {
+      ok: false
+      reason: CibaStartFailReason
+      seated?: number
+      required?: number
+    }
+
 export interface Claim {
   id: string
   userId: string
