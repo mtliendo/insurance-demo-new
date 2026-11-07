@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { auth0, generatePolicyId, policyIdFromUser } from '@/lib/auth0'
 import { pollCancelCibaForClaim } from '@/lib/ciba-cancel'
+import { tryWriteHostCalendarEvent } from '@/lib/ciba-flow'
 import { addMessage, createClaim, getClaim, getLatestClaimForUser } from '@/lib/claims'
+import { isBoardDemoEnabled } from '@/lib/demo-flags'
 import { buildClaimSnapshot } from '@/lib/snapshot'
 import type { ClaimSnapshot } from '@/lib/types'
 
@@ -13,23 +15,40 @@ const GREETINGS = [
   "Hey! I'll guide you through filing your claim. What brings you here today?",
 ]
 
+const CALENDAR_CONNECTED_CHAT =
+  'Google Calendar is connected now — I added this claim to your calendar.'
+
 /**
- * Starts a claim, or resumes the caller's most recent unapproved one. The Vite
- * app generated a policy number in the browser and held the claim in React
- * state; here it is a row keyed to the Auth0 `sub`.
+ * Starts a claim, or resumes the caller's most recent one (any status) so
+ * a Settings detour does not wipe the chat. Pass `{ newChat: true }` to
+ * start a fresh pending row instead of resuming.
  */
-export async function POST() {
+export async function POST(request: Request) {
   const session = await auth0.getSession()
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  let newChat = false
+  if (request.headers.get('content-type')?.includes('application/json')) {
+    const body = (await request.json().catch(() => null)) as {
+      newChat?: unknown
+    } | null
+    newChat = body?.newChat === true
+  }
+
   const userId = session.user.sub
-  const existing = await getLatestClaimForUser(userId)
+  const existing = newChat ? null : await getLatestClaimForUser(userId)
 
   if (existing) {
     if (existing.cancelCibaStatus === 'pending') {
       await pollCancelCibaForClaim(existing.id)
+    }
+    if (!isBoardDemoEnabled()) {
+      const wrote = await tryWriteHostCalendarEvent(existing.id, session.user)
+      if (wrote === 'written') {
+        await addMessage(existing.id, 'assistant', CALENDAR_CONNECTED_CHAT)
+      }
     }
     const latest = (await getClaim(existing.id)) ?? existing
     const snapshot: ClaimSnapshot = await buildClaimSnapshot(latest)

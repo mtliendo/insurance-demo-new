@@ -3,6 +3,7 @@ import { claimsModel } from '@/lib/agent/model'
 import { SYSTEM_PROMPT, claimContext } from '@/lib/agent/system-prompt'
 import { claimTools } from '@/lib/agent/tools'
 import { getClaim } from '@/lib/claims'
+import { isGoogleConnected } from '@/lib/google'
 import type { ChatMessage, Claim } from '@/lib/types'
 
 const MAX_OUTPUT_TOKENS = 8000
@@ -26,9 +27,15 @@ export async function runAgent(
   const claimId = claim.id
   let current = claim
 
+  async function instructionsForCurrent() {
+    current = (await getClaim(claimId)) ?? current
+    const googleConnected = await isGoogleConnected()
+    return SYSTEM_PROMPT + '\n\n' + claimContext(current, { googleConnected })
+  }
+
   const result = await generateText({
     model: claimsModel(),
-    instructions: SYSTEM_PROMPT + '\n\n' + claimContext(current),
+    instructions: await instructionsForCurrent(),
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     stopWhen: stepCountIs(MAX_TURNS),
     tools: claimTools(current, actor),
@@ -36,12 +43,9 @@ export async function runAgent(
       role: m.role,
       content: m.content,
     })),
-    prepareStep: async () => {
-      current = (await getClaim(claimId)) ?? current
-      return {
-        instructions: SYSTEM_PROMPT + '\n\n' + claimContext(current),
-      }
-    },
+    prepareStep: async () => ({
+      instructions: await instructionsForCurrent(),
+    }),
     providerOptions: {
       gateway: {
         tags: ['feature:claims-agent', 'app:hero-shield'],
