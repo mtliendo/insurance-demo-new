@@ -1,4 +1,5 @@
 import { sanitizeBindingMessage } from '@/lib/binding-message'
+import { CIBA_INTERVAL_FLOOR, floorInterval, nextPollInterval } from '@/lib/ciba-interval'
 
 /** Auth0 sends email when requested_expiry is 301–259200s. ≤300 is Guardian push. */
 export const CIBA_EMAIL_EXPIRY_SECONDS = 600
@@ -23,9 +24,11 @@ function requireEnv(name: string) {
  * Client-initiated backchannel auth over email. Copied from the working
  * loop in https://github.com/mtliendo/ciba-email — not @auth0/ai.
  *
- * Per board member: POST /bc-authorize with login_hint iss_sub (that
- * member's sub), requested_expiry=600, binding_message. Then poll
- * /oauth/token with grant_type urn:openid:params:grant-type:ciba.
+ * POST /bc-authorize with login_hint iss_sub:
+ *   iss = https://${AUTH0_DOMAIN}/
+ *   sub = the authorizing user's Auth0 sub (current session for cancel)
+ * requested_expiry=600 selects the **email** channel (>300; ≤300 is Guardian).
+ * Then poll /oauth/token with grant_type urn:openid:params:grant-type:ciba.
  */
 export async function startCiba(sub: string, bindingMessage: string) {
   const cleaned = sanitizeBindingMessage(bindingMessage)
@@ -107,4 +110,60 @@ export async function pollCiba(authReqId: string) {
     status: 'error' as const,
     error: json.error_description || error || 'token poll failed',
   }
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+/** Default how long `cancel_claim` waits for the policyholder's CIBA email. */
+const DEFAULT_CANCEL_WAIT_MS = 70_000
+
+/**
+ * Optional `CIBA_CANCEL_WAIT_MS` (milliseconds). Floor 10s, cap 240s.
+ * Keep this under the chat route `maxDuration` so the tool can finish.
+ */
+export function cancelCibaWaitMs(): number {
+  const raw = process.env.CIBA_CANCEL_WAIT_MS
+  if (!raw?.trim()) return DEFAULT_CANCEL_WAIT_MS
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return DEFAULT_CANCEL_WAIT_MS
+  return Math.min(240_000, Math.max(10_000, n))
+}
+
+export type CibaWaitResult =
+  | { status: 'approved' }
+  | { status: 'denied'; error?: string }
+  | { status: 'error'; error: string }
+  | { status: 'timeout' }
+
+/**
+ * Poll `/oauth/token` until CIBA is approved, denied, errors, or the
+ * wait budget runs out. Honors Auth0's interval (floor 5s) and
+ * `slow_down`. Used by `cancel_claim` so the tool itself waits — we do
+ * **not** write `ciba_authorizations` (those rows are the board grant).
+ */
+export async function waitForCiba(
+  authReqId: string,
+  options?: { timeoutMs?: number; intervalSec?: number },
+): Promise<CibaWaitResult> {
+  const timeoutMs = options?.timeoutMs ?? cancelCibaWaitMs()
+  const deadline = Date.now() + timeoutMs
+  let intervalSec = floorInterval(options?.intervalSec ?? CIBA_INTERVAL_FLOOR)
+
+  while (Date.now() < deadline) {
+    const waitMs = Math.min(intervalSec * 1000, Math.max(0, deadline - Date.now()))
+    if (waitMs > 0) await sleep(waitMs)
+    if (Date.now() >= deadline) break
+
+    const result = await pollCiba(authReqId)
+    if (result.status === 'approved') return { status: 'approved' }
+    if (result.status === 'denied') return { status: 'denied', error: result.error }
+    if (result.status === 'error') {
+      return { status: 'error', error: result.error || 'token poll failed' }
+    }
+    intervalSec = nextPollInterval(intervalSec, result.interval, result.slowDown)
+  }
+
+  return { status: 'timeout' }
 }

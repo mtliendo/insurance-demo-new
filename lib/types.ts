@@ -1,6 +1,14 @@
-export type ClaimStatus = 'pending' | 'awaiting_approval' | 'approved' | 'denied'
+export type ClaimStatus =
+  | 'pending'
+  | 'awaiting_approval'
+  | 'approved'
+  | 'denied'
+  | 'cancelled'
 
 export type CibaStatus = 'pending' | 'approved' | 'denied' | 'error'
+
+/** Policyholder cancel-claim CIBA (not the seated board). */
+export type CancelCibaStatus = 'pending' | 'approved' | 'denied'
 
 export type CibaBlockReason = 'no_google' | 'no_board'
 
@@ -35,6 +43,8 @@ export interface Claim {
   /** Frozen at CIBA start. Null until emails go out. */
   cibaBoardSize: number | null
   cibaYesThreshold: number | null
+  /** Cancel-claim CIBA to the signed-in user. Null until they ask to cancel. */
+  cancelCibaStatus: CancelCibaStatus | null
 }
 
 export interface ChatMessage {

@@ -1,5 +1,6 @@
 import { Auth0Client } from '@auth0/nextjs-auth0/server'
 import { NextResponse } from 'next/server'
+import { isBoardDemoEnabled } from '@/lib/demo-flags'
 
 export const LOGIN_SCOPES = 'openid profile email offline_access'
 
@@ -27,7 +28,11 @@ export const auth0 = new Auth0Client({
       const connectFailure =
         ctx.responseType === 'connect_code' ||
         (ctx.returnTo ?? '').startsWith('/settings')
-      const path = connectFailure ? '/settings' : '/join'
+      const path = connectFailure
+        ? '/settings'
+        : isBoardDemoEnabled()
+          ? '/join'
+          : '/'
       return NextResponse.redirect(
         new URL(
           `${path}?error=${encodeURIComponent(error.message)}`,

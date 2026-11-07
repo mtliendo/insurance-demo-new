@@ -59,7 +59,7 @@ auth0 apps create \
 ```
 
 The output carries `CLIENT ID` and `CLIENT SECRET`. Get the tenant domain with
-`auth0 tenants list` — use the bare host, e.g. `dev-2zis9k18.us.auth0.com`, with
+`auth0 tenants list` — use the bare host, e.g. `focusotter-apps.us.auth0.com`, with
 **no `https://`** prefix.
 
 ### Option B — dashboard (ask the human)
@@ -76,7 +76,7 @@ Then ask the human for Domain, Client ID, and Client Secret from that Settings t
 
 ```dotenv
 APP_BASE_URL=http://localhost:3000
-AUTH0_DOMAIN=your-tenant.us.auth0.com
+AUTH0_DOMAIN=focusotter-apps.us.auth0.com
 AUTH0_CLIENT_ID=...
 AUTH0_CLIENT_SECRET=...
 AUTH0_SECRET=            # generate: openssl rand -hex 32
@@ -153,8 +153,9 @@ Auth0 picks the channel from `requested_expiry`:
 This demo always sends `requested_expiry=600`. `login_hint` is `iss_sub` (that
 board member's Auth0 `sub`), never a raw email. `binding_message` is at most
 64 characters, charset `A-Za-z0-9+-_.,:#`, no spaces
-(`Hulk-smash-claim-<id>`). The authorizing user must have a **verified**
-email or they cannot sit on the board.
+(`Hulk-smash-claim-<id>`). `cancel_claim` uses `Cancel-claim-#<id>` and
+emails the policyholder, not the board. The authorizing user must have a
+**verified** email or they cannot sit on the board (or receive cancel CIBA).
 
 ### Token Vault — host Google Calendar only
 
@@ -304,6 +305,8 @@ Then walk the happy path:
 | Auth0 `slow_down` on stage | Polls must honor stored `interval_sec` (floor 5). Do not reset after `authorization_pending`. |
 | Board member missing from pick | Email not verified on the Auth0 user, or they are the configured host |
 | Calendar event missing after the threshold yeses | Token Vault Google connection dropped; reconnect on `/settings` |
+| Cancel CIBA email never arrives | Same grant as the board: CIBA + **email** channel enabled, Asynchronous Approval template on, filer has a **verified** email. Binding message is `Cancel-claim-#<id>` (no spaces). Google Calendar is **not** required for cancel. |
+| `cancel my claim` times out | Approve the email within ~70s (optional `CIBA_CANCEL_WAIT_MS`). Claim stays unchanged; say it again after you approve. |
 
 ---
 

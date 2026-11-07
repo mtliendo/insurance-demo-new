@@ -1,4 +1,6 @@
+import { redirect } from 'next/navigation'
 import { auth0 } from '@/lib/auth0'
+import { isBoardDemoEnabled } from '@/lib/demo-flags'
 import { AudienceNav } from '@/components/site-nav'
 import { JoinClient, JoinLogin } from '@/components/join-client'
 
@@ -11,6 +13,8 @@ export default async function JoinPage({
 }: {
   searchParams: Promise<{ error?: string | string[] }>
 }) {
+  if (!isBoardDemoEnabled()) redirect('/')
+
   const session = await auth0.getSession()
   const params = await searchParams
   const error = typeof params.error === 'string' ? params.error : null

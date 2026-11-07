@@ -28,6 +28,7 @@ import {
   getDemoHost,
   isFullBoard,
 } from '@/lib/board-config'
+import { isBoardDemoEnabled } from '@/lib/demo-flags'
 import { canWriteHostCalendar, isAdmin, matchesDemoHost } from '@/lib/host'
 import type { CibaAutoStart, Claim } from '@/lib/types'
 
@@ -130,6 +131,7 @@ export function cibaStartAgentMessage(result: CibaStartResult): string {
 export async function autoStartCibaFromHostPoll(
   claim: Claim | null,
 ): Promise<CibaStartResult | null> {
+  if (!isBoardDemoEnabled()) return null
   if (!claim || claim.status !== 'awaiting_approval') return null
   return startCibaForSubmittedClaim(claim.id)
 }
@@ -270,7 +272,7 @@ export async function pollCibaForClaim(
   return getClaim(claimId)
 }
 
-async function writeHostCalendarEvent(claimId: string): Promise<void> {
+export async function writeHostCalendarEvent(claimId: string): Promise<void> {
   const claim = await getClaim(claimId)
   if (!claim || claim.calendarEventId) return
 
@@ -292,7 +294,7 @@ async function writeHostCalendarEvent(claimId: string): Promise<void> {
         claim.incidentDescription ?? 'Superhero incident',
         claim.incidentLocation ? `Location: ${claim.incidentLocation}` : null,
         claim.damageExtent ? `Damage: ${claim.damageExtent}` : null,
-        `Released by CIBA board: ${yeses}`,
+        yeses ? `Released by CIBA board: ${yeses}` : 'Token Vault calendar write',
         `Claim ${claim.id}`,
       ]
         .filter(Boolean)

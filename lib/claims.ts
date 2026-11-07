@@ -1,7 +1,35 @@
 import { clearSeatedBoard } from '@/lib/board'
 import { ensureBoardRulesSchema } from '@/lib/board-config'
 import { sql } from '@/lib/db'
-import type { ChatMessage, CibaBlockReason, Claim, ClaimStatus } from '@/lib/types'
+import type {
+  CancelCibaStatus,
+  ChatMessage,
+  CibaBlockReason,
+  Claim,
+  ClaimStatus,
+} from '@/lib/types'
+
+let statusSchemaReady = false
+
+/** Allow `cancelled` on existing DBs whose check constraint predates this status. */
+async function ensureClaimStatusSchema(): Promise<void> {
+  if (statusSchemaReady) return
+  try {
+    await sql`alter table claims drop constraint if exists claims_status_check`
+    await sql`
+      alter table claims add constraint claims_status_check
+        check (status in ('pending','awaiting_approval','approved','denied','cancelled'))
+    `
+  } catch (error) {
+    console.error('Could not update claims status check for cancelled:', error)
+  }
+  try {
+    await sql`alter table claims add column if not exists cancel_ciba_status text`
+    statusSchemaReady = true
+  } catch (error) {
+    console.error('Could not add cancel_ciba_status column:', error)
+  }
+}
 
 type ClaimRow = {
   id: string
@@ -17,6 +45,7 @@ type ClaimRow = {
   ciba_block_reason: string | null
   ciba_board_size: number | null
   ciba_yes_threshold: number | null
+  cancel_ciba_status: string | null
 }
 
 function toClaim(row: ClaimRow): Claim {
@@ -39,11 +68,18 @@ function toClaim(row: ClaimRow): Claim {
       row.ciba_board_size == null ? null : Number(row.ciba_board_size),
     cibaYesThreshold:
       row.ciba_yes_threshold == null ? null : Number(row.ciba_yes_threshold),
+    cancelCibaStatus:
+      row.cancel_ciba_status === 'pending' ||
+      row.cancel_ciba_status === 'approved' ||
+      row.cancel_ciba_status === 'denied'
+        ? row.cancel_ciba_status
+        : null,
   }
 }
 
 export async function createClaim(userId: string, policyId: string): Promise<Claim> {
   await ensureBoardRulesSchema()
+  await ensureClaimStatusSchema()
   const rows = (await sql`
     insert into claims (user_id, policy_id)
     values (${userId}, ${policyId})
@@ -54,6 +90,7 @@ export async function createClaim(userId: string, policyId: string): Promise<Cla
 
 export async function getClaim(id: string): Promise<Claim | null> {
   await ensureBoardRulesSchema()
+  await ensureClaimStatusSchema()
   const rows = (await sql`select * from claims where id = ${id}`) as ClaimRow[]
   return rows[0] ? toClaim(rows[0]) : null
 }
@@ -61,9 +98,10 @@ export async function getClaim(id: string): Promise<Claim | null> {
 /** Most recent claim for a user — lets the file-claim page resume instead of restarting. */
 export async function getLatestClaimForUser(userId: string): Promise<Claim | null> {
   await ensureBoardRulesSchema()
+  await ensureClaimStatusSchema()
   const rows = (await sql`
     select * from claims
-    where user_id = ${userId} and status <> 'approved'
+    where user_id = ${userId} and status not in ('approved', 'cancelled')
     order by created_at desc
     limit 1
   `) as ClaimRow[]
@@ -138,6 +176,47 @@ export async function setCibaBlockReason(
   `
 }
 
+export async function setCancelCibaStatus(
+  claimId: string,
+  status: CancelCibaStatus,
+): Promise<void> {
+  await ensureClaimStatusSchema()
+  await sql`
+    update claims set cancel_ciba_status = ${status}, updated_at = now()
+    where id = ${claimId}
+  `
+}
+
+/**
+ * Approve without a seated board — Token Vault talk path. Does not
+ * require ciba_yes_threshold.
+ */
+export async function approveClaimWithoutBoard(claimId: string): Promise<boolean> {
+  await ensureBoardRulesSchema()
+  await ensureClaimStatusSchema()
+  const rows = (await sql`
+    update claims set status = 'approved', updated_at = now()
+    where id = ${claimId} and status in ('pending', 'awaiting_approval')
+    returning id
+  `) as { id: string }[]
+  return rows.length > 0
+}
+
+/**
+ * Backs the cancel_claim tool after CIBA approval. Leaves board CIBA
+ * rows alone — those only release `awaiting_approval` claims.
+ */
+export async function cancelClaim(claimId: string): Promise<boolean> {
+  await ensureBoardRulesSchema()
+  await ensureClaimStatusSchema()
+  const rows = (await sql`
+    update claims set status = 'cancelled', updated_at = now()
+    where id = ${claimId} and status <> 'cancelled'
+    returning id
+  `) as { id: string }[]
+  return rows.length > 0
+}
+
 /**
  * Release the claim. Callers must have already checked CIBA yeses
  * against the pair frozen on this row — not live demo_settings.
@@ -169,6 +248,7 @@ export async function attachCalendarEvent(
 
 export async function getLatestSubmittedClaim(): Promise<Claim | null> {
   await ensureBoardRulesSchema()
+  await ensureClaimStatusSchema()
   const rows = (await sql`
     select * from claims
     where status in ('awaiting_approval', 'approved')
@@ -196,6 +276,7 @@ export type ClearedClaim = {
  */
 export async function clearCurrentClaims(hostUserId: string): Promise<ClearedClaim[]> {
   await ensureBoardRulesSchema()
+  await ensureClaimStatusSchema()
 
   // Projector uses getLatestSubmittedClaim (latest awaiting_approval or
   // approved). Must delete approved+calendar rows too, or /host keeps

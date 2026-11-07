@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/card'
 import { BoardPanel } from '@/components/board-panel'
 import { ClearClaimButton } from '@/components/clear-claim-button'
+import { isBoardDemoEnabled } from '@/lib/demo-flags'
 import type { ClaimSnapshot } from '@/lib/types'
 
 const POLL_INTERVAL_MS = 2000
@@ -80,9 +81,14 @@ export function FileClaimClient({
    */
   const status = snapshot?.claim.status
   const claimId = snapshot?.claim.id
+  const cancelCibaStatus = snapshot?.claim.cancelCibaStatus
+  const cancelIntent =
+    isSending && lastUserAskedToCancel(snapshot?.messages ?? [])
 
   useEffect(() => {
-    if (!claimId || status !== 'awaiting_approval') return
+    const boardPoll = isBoardDemoEnabled() && status === 'awaiting_approval'
+    const cancelPoll = cancelCibaStatus === 'pending' || cancelIntent
+    if (!claimId || (!boardPoll && !cancelPoll)) return
 
     const timer = setInterval(async () => {
       try {
@@ -91,14 +97,16 @@ export function FileClaimClient({
         const next: ClaimSnapshot = await res.json()
         if (next.claim.id !== liveClaimId.current) return
         setSnapshot(next)
-        if (next.claim.status === 'approved') setShowApprovalModal(true)
+        if (isBoardDemoEnabled() && next.claim.status === 'approved') {
+          setShowApprovalModal(true)
+        }
       } catch (error) {
         console.error('Poll failed:', error)
       }
     }, POLL_INTERVAL_MS)
 
     return () => clearInterval(timer)
-  }, [claimId, status])
+  }, [claimId, status, cancelCibaStatus, cancelIntent])
 
   useEffect(() => {
     const onResize = () =>
@@ -173,6 +181,11 @@ export function FileClaimClient({
   const remaining = board.requiredApprovals - approvalCount
   const isApproved = claim.status === 'approved'
   const isAwaiting = claim.status === 'awaiting_approval'
+  const isCancelled = claim.status === 'cancelled'
+  const waitingForCancelApproval =
+    cancelCibaStatus === 'pending' ||
+    (isSending && lastUserAskedToCancel(messages))
+  const showBoardUi = isBoardDemoEnabled()
 
   return (
     <div className="hud-grid relative min-h-screen overflow-hidden p-4 md:p-8">
@@ -297,7 +310,11 @@ export function FileClaimClient({
                           />
                         ))}
                       </span>
-                      <span className="hud-label text-[0.6rem]">Analyzing</span>
+                      <span className="hud-label text-[0.6rem]">
+                        {waitingForCancelApproval
+                          ? 'Waiting for your approval, check your email'
+                          : 'Analyzing'}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -328,7 +345,9 @@ export function FileClaimClient({
 
           {/* ---- Claim manifest -------------------------------------------- */}
           <Card
-            data-stone={isApproved ? 'time' : isAwaiting ? 'mind' : 'space'}
+            data-stone={
+              isApproved ? 'time' : isAwaiting ? 'mind' : isCancelled ? 'reality' : 'space'
+            }
             className="animate-rise stagger-2 hud-panel h-fit rounded-none border-transparent lg:w-80"
           >
             <span className="absolute inset-x-0 top-0 h-0.5 bg-[var(--stone)] transition-colors duration-700" />
@@ -365,30 +384,63 @@ export function FileClaimClient({
               <div>
                 <div className="flex items-center justify-between">
                   <span className="hud-label text-[0.6rem]">Status</span>
-                  <Badge variant={isApproved ? 'success' : isAwaiting ? 'warning' : 'secondary'}>
-                    {isAwaiting
+                  <Badge
+                    variant={
+                      isApproved
+                        ? 'success'
+                        : isAwaiting
+                          ? 'warning'
+                          : isCancelled
+                            ? 'destructive'
+                            : 'secondary'
+                    }
+                  >
+                    {isAwaiting && showBoardUi
                       ? `CIBA ${approvalCount}/${board.requiredApprovals}`
                       : isApproved
                         ? 'Approved'
-                        : claim.status}
+                        : isCancelled
+                          ? 'Cancelled'
+                          : claim.status}
                   </Badge>
                 </div>
 
-                {isAwaiting && !googleConnected && (
+                {(waitingForCancelApproval || claim.cancelCibaStatus) && (
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="hud-label text-[0.6rem]">Cancel CIBA</span>
+                    <Badge
+                      variant={
+                        claim.cancelCibaStatus === 'approved'
+                          ? 'success'
+                          : claim.cancelCibaStatus === 'denied'
+                            ? 'destructive'
+                            : 'warning'
+                      }
+                    >
+                      {claim.cancelCibaStatus === 'approved'
+                        ? 'Approved'
+                        : claim.cancelCibaStatus === 'denied'
+                          ? 'Denied'
+                          : 'Pending'}
+                    </Badge>
+                  </div>
+                )}
+
+                {showBoardUi && isAwaiting && !googleConnected && (
                   <p className="mt-3 text-xs text-gold">
                     Waiting on the operator to connect Google Calendar. The host
                     console starts CIBA automatically once Calendar is live.
                   </p>
                 )}
 
-                {isAwaiting && board.blockReason === 'no_board' && (
+                {showBoardUi && isAwaiting && board.blockReason === 'no_board' && (
                   <p className="mt-3 text-xs text-gold">
                     Waiting on a full board of {board.boardSize}. The host console
                     starts CIBA automatically once someone from the room is seated.
                   </p>
                 )}
 
-                {(isAwaiting || isApproved) && board.members.length > 0 && (
+                {showBoardUi && (isAwaiting || isApproved) && board.members.length > 0 && (
                   <div className="animate-fade-in mt-3">
                     <BoardPanel board={board} compact />
                     {remaining > 0 && isAwaiting && board.started && (
@@ -397,6 +449,12 @@ export function FileClaimClient({
                       </p>
                     )}
                   </div>
+                )}
+
+                {isCancelled && (
+                  <p className="mt-3 text-xs text-destructive">
+                    This claim was cancelled after you approved the CIBA email.
+                  </p>
                 )}
 
                 {isApproved && (
@@ -419,6 +477,12 @@ export function FileClaimClient({
       </div>
     </div>
   )
+}
+
+/** True when the in-flight turn is a cancel request (CIBA pending beat). */
+function lastUserAskedToCancel(messages: ClaimSnapshot['messages']): boolean {
+  const last = [...messages].reverse().find((m) => m.role === 'user')
+  return last ? /\bcancel(?:l?ed|l?ing)?\b/i.test(last.content) : false
 }
 
 /**

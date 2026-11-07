@@ -5,11 +5,16 @@ import { useUser } from '@auth0/nextjs-auth0'
 import { FileText, LogIn, LogOut, Settings, ShieldHalf, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { isBoardDemoEnabled } from '@/lib/demo-flags'
 
 const LINKS = [
   { href: '/', label: 'Home' },
-  { href: '/join', label: 'Join' },
-  { href: '/host', label: 'Board' },
+  ...(isBoardDemoEnabled()
+    ? [
+        { href: '/join', label: 'Join' },
+        { href: '/host', label: 'Board' },
+      ]
+    : [{ href: '/host', label: 'Host' }]),
 ]
 
 export function SiteNav() {
@@ -162,7 +167,13 @@ export function HeroActions() {
         )}
       </Button>
       <Button asChild size="lg" variant="hud">
-        {user ? <Link href="/profile">View Coverage</Link> : <Link href="/join">Join the room</Link>}
+        {user ? (
+          <Link href="/profile">View Coverage</Link>
+        ) : isBoardDemoEnabled() ? (
+          <Link href="/join">Join the room</Link>
+        ) : (
+          <a href="/auth/login">View Coverage</a>
+        )}
       </Button>
     </div>
   )
