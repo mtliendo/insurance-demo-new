@@ -1,8 +1,8 @@
 # Hero Shield Insurance
 
 A conference-demo app: superhero car insurance. File a claim by **talking to
-an AI agent**, a **logged-in CIBA board** approves it over email, and the
-presenter's **Google Calendar** gets the event via Auth0 Token Vault.
+an AI agent**, write the appointment on **Google Calendar** via Auth0 Token
+Vault, then **cancel the claim** only after CIBA email approval.
 
 Built on Next.js 16 + Auth0 + Neon Postgres + the Vercel AI SDK (AI Gateway,
 Anthropic default). It is a port of an earlier AWS/Vite version of the same
@@ -27,7 +27,7 @@ on purpose — they are the point of the talk:
 | **Regular Web Application** + server session cookie | `@auth0/nextjs-auth0` v4 in [proxy.ts](proxy.ts) / [lib/auth0.ts](lib/auth0.ts). Not a SPA. Needs a client secret. |
 | **Email verification** | Unverified joiners watch `/join`; they cannot sit on the CIBA board |
 | **Custom ID token claims** | Optional post-login Action sets `https://claims.interview-demo.com/policyId` |
-| **CIBA (Client-Initiated Backchannel Authentication)** | Seated board approves the claim from email. `requested_expiry=600` selects the **email** channel, not Guardian. Requires **Essentials (or Professional) + Auth0 for AI Agents add-on**. Same grant cancels a claim: `cancel_claim` emails the **policyholder** (`Cancel-claim-#<id>`), waits for Accept/Decline, then sets status `cancelled`. |
+| **CIBA (Client-Initiated Backchannel Authentication)** | `cancel_claim` emails the **signed-in user** (`login_hint` iss_sub, `iss=https://${AUTH0_DOMAIN}/`, `requested_expiry=600` so it goes by **email** not Guardian). Manifest shows pending / approved / denied. Approval sets status `cancelled`. Requires **Essentials (or Professional) + Auth0 for AI Agents add-on**. The seated-board grant is still in the repo behind `NEXT_PUBLIC_DEMO_BOARD_ENABLED=1` (default **off**). |
 | **CIBA email / Asynchronous Approval template** | Branding → Email Templates → Asynchronous Approval. `login_hint` is `iss_sub`. |
 | **Token Vault** | Host-only Google Calendar connect on `/settings` (`/auth/connect`). Audience never sees Google consent. |
 | **First-party confidential client** | Required for the CIBA grant (`oidc_conformant`, not `token_endpoint_auth_method: none`) |
@@ -39,37 +39,24 @@ CIBA setup, plan requirements, and Token Vault steps:
 
 ---
 
-## What the demo does
+## What the demo does (Iowa Code Camp)
 
-1. **The room scans one QR.** `/join` sends everyone through Auth0 Universal
-   Login so we have `sub`, email, and name. An unverified email can watch the
-   room; it cannot sit on the CIBA board.
-2. **The presenter picks the board.** An `@okta.com` or
-   `admin@focusotter.com` login opens `/host`. They save themselves as
-   **demo host** (email + Auth0 `sub`; sub defaults to theirs). The console
-   randomly seats the saved board size of verified (non-host) joiners
-   (default 1; raise to 6 for the talk). The configured host is never
-   seated. Joiner phones flip to "you're on the board."
-3. **The filer files the claim in chat.** `/file-claim` is the claims
-   agent (white 2006 Honda Pilot, Hulk-smashed car) via the Vercel AI
-   Gateway. Confirm submission flips the row to `awaiting_approval`. The
-   open `/host` console starts CIBA automatically on its next poll.
-4. **CIBA email goes to the seated board, not the room, and never the host.**
-   If the host has not connected Google Calendar, we refuse to send. We
-   `POST /bc-authorize` per seated member (`login_hint` `iss_sub`,
-   `requested_expiry=600`) and store `{authReqId, sub, email, name, status}`.
-   The projector ticks as they Accept or Decline.
-5. **CIBA yeses at the saved threshold release the claim.** Then we write
-   one event on the **host** Google Calendar with Token Vault
-   (`getAccessTokenForConnection({ connection: 'google-oauth2' })`).
+Board seating, QR, and `/join` are **off** unless you set
+`NEXT_PUBLIC_DEMO_BOARD_ENABLED=1`. The talk is Token Vault + cancel CIBA.
+
+1. **Admin signs in** (`admin@focusotter.com` or `@okta.com`) and opens
+   `/settings`. **Connect Google Calendar** — Auth0 Token Vault, host-only.
+2. **File the Hulk-smashed Honda Pilot** on `/file-claim`. Confirm submit.
+   The agent writes one event on that Google Calendar (no seated board).
+3. **Type `cancel my claim`.** CIBA emails the signed-in user
+   (`login_hint` iss_sub of **this session**, `requested_expiry=600`).
+   Chat/manifest show **pending**. Accept → claim **cancelled**. Decline or
+   timeout → unchanged, status **denied**.
+
+Admin calendar writes match **email**, not a stored Auth0 `sub` from an old
+tenant.
 
 ![Audience join — Auth0 login required to sit on the CIBA board](docs/images/join.jpg)
-
-The CIBA board is the grant.
-
-The interesting part is that **every one of those steps is a row in Postgres**.
-Refresh mid-claim and you resume exactly where you were; the board and CIBA
-polls are durable.
 
 ---
 
@@ -172,19 +159,17 @@ threshold). Those persist in Neon `demo_settings`. Raise to **6 / 3** on
 
 ## Running the demo on stage
 
-1. Presenter signs in with an admin email (`@okta.com` or
-   `admin@focusotter.com`), opens `/host`, saves **Demo host** (their
-   email + `sub`), then `/settings` → Connect Google Calendar.
-2. Projector on `/host`. Audience scans the QR → Auth0 login → `/join`.
-3. **Pick board.** Seated phones show "you're on the board."
-4. Filer files the Hulk-smashed-car claim on `/file-claim`. Confirm
-   submission. With `/host` open, the host poll starts CIBA.
-5. CIBA emails go out to the seated board (`requested_expiry=600`). The
-   projector ticks pending → approved / denied.
-6. Yeses at the saved threshold approve the claim, confetti fires, and a
-   calendar event lands on the host Google account.
+1. Sign in with `admin@focusotter.com` or an `@okta.com` email.
+2. `/settings` → **Connect Google Calendar** (Token Vault).
+3. `/file-claim` → Hulk smashed a white 2006 Honda Pilot → confirm submit.
+   Calendar event lands if Google is connected.
+4. Type **`cancel my claim`**. Approve the email (`Cancel-claim-#<id>`).
+5. Manifest: Cancel CIBA **Approved**, status **Cancelled**.
 
 Between runs, tap **Start over** on `/file-claim` or `/host` (admin only).
+
+The seated-board / QR path is still in the repo. Turn it on with
+`NEXT_PUBLIC_DEMO_BOARD_ENABLED=1` (and a rebuild). Default is off.
 
 ## Cancel a claim (CIBA)
 

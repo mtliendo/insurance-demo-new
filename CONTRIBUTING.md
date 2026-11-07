@@ -65,7 +65,9 @@ Coding agents (Cursor, Claude Code, etc.) should:
    `provider/model` string (`anthropic/claude-opus-5` by default). Do not
    add `@anthropic-ai/sdk` or `ANTHROPIC_API_KEY`.
 4. Keep CIBA in [lib/ciba.ts](lib/ciba.ts). This app does **not** use
-   `@auth0/ai`.
+`@auth0/ai`. The audience board UI is behind
+`NEXT_PUBLIC_DEMO_BOARD_ENABLED` (default **off**). Iowa Code Camp uses
+Token Vault + `cancel_claim` CIBA to the signed-in session.
 5. Never print a filled-in `.env.local`.
 
 The claims agent itself lives in [lib/agent/](lib/agent/). It is a

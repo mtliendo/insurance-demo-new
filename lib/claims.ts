@@ -1,7 +1,13 @@
 import { clearSeatedBoard } from '@/lib/board'
 import { ensureBoardRulesSchema } from '@/lib/board-config'
 import { sql } from '@/lib/db'
-import type { ChatMessage, CibaBlockReason, Claim, ClaimStatus } from '@/lib/types'
+import type {
+  CancelCibaStatus,
+  ChatMessage,
+  CibaBlockReason,
+  Claim,
+  ClaimStatus,
+} from '@/lib/types'
 
 let statusSchemaReady = false
 
@@ -14,9 +20,14 @@ async function ensureClaimStatusSchema(): Promise<void> {
       alter table claims add constraint claims_status_check
         check (status in ('pending','awaiting_approval','approved','denied','cancelled'))
     `
-    statusSchemaReady = true
   } catch (error) {
     console.error('Could not update claims status check for cancelled:', error)
+  }
+  try {
+    await sql`alter table claims add column if not exists cancel_ciba_status text`
+    statusSchemaReady = true
+  } catch (error) {
+    console.error('Could not add cancel_ciba_status column:', error)
   }
 }
 
@@ -34,6 +45,7 @@ type ClaimRow = {
   ciba_block_reason: string | null
   ciba_board_size: number | null
   ciba_yes_threshold: number | null
+  cancel_ciba_status: string | null
 }
 
 function toClaim(row: ClaimRow): Claim {
@@ -56,6 +68,12 @@ function toClaim(row: ClaimRow): Claim {
       row.ciba_board_size == null ? null : Number(row.ciba_board_size),
     cibaYesThreshold:
       row.ciba_yes_threshold == null ? null : Number(row.ciba_yes_threshold),
+    cancelCibaStatus:
+      row.cancel_ciba_status === 'pending' ||
+      row.cancel_ciba_status === 'approved' ||
+      row.cancel_ciba_status === 'denied'
+        ? row.cancel_ciba_status
+        : null,
   }
 }
 
@@ -156,6 +174,32 @@ export async function setCibaBlockReason(
     set ciba_block_reason = ${reason}, updated_at = now()
     where id = ${claimId}
   `
+}
+
+export async function setCancelCibaStatus(
+  claimId: string,
+  status: CancelCibaStatus,
+): Promise<void> {
+  await ensureClaimStatusSchema()
+  await sql`
+    update claims set cancel_ciba_status = ${status}, updated_at = now()
+    where id = ${claimId}
+  `
+}
+
+/**
+ * Approve without a seated board — Token Vault talk path. Does not
+ * require ciba_yes_threshold.
+ */
+export async function approveClaimWithoutBoard(claimId: string): Promise<boolean> {
+  await ensureBoardRulesSchema()
+  await ensureClaimStatusSchema()
+  const rows = (await sql`
+    update claims set status = 'approved', updated_at = now()
+    where id = ${claimId} and status in ('pending', 'awaiting_approval')
+    returning id
+  `) as { id: string }[]
+  return rows.length > 0
 }
 
 /**

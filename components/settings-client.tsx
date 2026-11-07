@@ -11,15 +11,11 @@ export function SettingsClient({
   userEmail,
   googleConnected,
   connectError,
-  boardSize,
-  yesThreshold,
 }: {
   userName: string
   userEmail: string
   googleConnected: boolean
   connectError: string | null
-  boardSize: number
-  yesThreshold: number
 }) {
   return (
     <div className="hud-grid relative min-h-screen overflow-hidden p-4 md:p-8">
@@ -30,8 +26,8 @@ export function SettingsClient({
             Token Vault
           </h1>
           <p className="mt-2 text-muted-foreground">
-            Only the host connects Google. The {boardSize} board members never do —
-            they approve over CIBA email.
+            Only the host connects Google Calendar via Auth0 Token Vault.
+            File a claim after this is connected so an event can be written.
           </p>
         </div>
 
@@ -89,8 +85,8 @@ export function SettingsClient({
             <div className="space-y-3 text-sm text-muted-foreground">
               <p className="flex gap-3">
                 <Shield className="mt-0.5 h-4 w-4 shrink-0 text-hud" />
-                After {yesThreshold} CIBA yes{yesThreshold === 1 ? '' : 'es'} we create
-                one event on this calendar. Board members never see a Google consent
+                Submitting a claim writes one event on this calendar. Cancel-claim
+                CIBA emails the signed-in user — nobody else sees a Google consent
                 screen.
               </p>
             </div>

@@ -15,7 +15,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith('/auth/connect')) {
     const session = await auth0.getSession(request)
     if (!session || !isAdmin(session.user)) {
-      return NextResponse.redirect(`${origin}/join`)
+      return NextResponse.redirect(`${origin}/`)
     }
     return authRes
   }

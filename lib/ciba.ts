@@ -24,9 +24,11 @@ function requireEnv(name: string) {
  * Client-initiated backchannel auth over email. Copied from the working
  * loop in https://github.com/mtliendo/ciba-email — not @auth0/ai.
  *
- * Per board member: POST /bc-authorize with login_hint iss_sub (that
- * member's sub), requested_expiry=600, binding_message. Then poll
- * /oauth/token with grant_type urn:openid:params:grant-type:ciba.
+ * POST /bc-authorize with login_hint iss_sub:
+ *   iss = https://${AUTH0_DOMAIN}/
+ *   sub = the authorizing user's Auth0 sub (current session for cancel)
+ * requested_expiry=600 selects the **email** channel (>300; ≤300 is Guardian).
+ * Then poll /oauth/token with grant_type urn:openid:params:grant-type:ciba.
  */
 export async function startCiba(sub: string, bindingMessage: string) {
   const cleaned = sanitizeBindingMessage(bindingMessage)

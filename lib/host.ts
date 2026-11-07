@@ -58,19 +58,16 @@ export function hostIdentityConfigured(host: DemoHost): boolean {
 }
 
 /**
- * Token Vault tokens belong to the current session. Only write calendar
- * when that session is the configured demo host — prefer sub so we
- * never mint an event from a joiner who happened to be polling.
+ * Token Vault tokens belong to the current session. Calendar writes
+ * follow the admin **email** match (`admin@focusotter.com` or
+ * `@okta.com`) — not a stored Auth0 `sub`, which goes stale when the
+ * tenant changes (e.g. to focusotter-apps.us.auth0.com).
  */
-export function canWriteHostCalendar(user: SessionUser, host: DemoHost): boolean {
-  if (!isAdmin(user) && !matchesDemoHost(host, user.sub ?? '', user.email)) {
-    return false
-  }
-  const configuredSub = host.sub?.trim()
-  if (configuredSub) return user.sub === configuredSub
-  const configuredEmail = host.email?.trim().toLowerCase()
-  if (configuredEmail) return user.email?.trim().toLowerCase() === configuredEmail
-  return isAdmin(user)
+export function canWriteHostCalendar(user: SessionUser, host?: DemoHost): boolean {
+  if (isAdmin(user)) return true
+  if (!host) return false
+  const hostEmail = host.email?.trim().toLowerCase()
+  return Boolean(hostEmail && user.email?.trim().toLowerCase() === hostEmail)
 }
 
 export function normalizeDemoHostEmail(value: unknown): string | null {

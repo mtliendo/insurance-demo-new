@@ -59,7 +59,7 @@ auth0 apps create \
 ```
 
 The output carries `CLIENT ID` and `CLIENT SECRET`. Get the tenant domain with
-`auth0 tenants list` — use the bare host, e.g. `dev-2zis9k18.us.auth0.com`, with
+`auth0 tenants list` — use the bare host, e.g. `focusotter-apps.us.auth0.com`, with
 **no `https://`** prefix.
 
 ### Option B — dashboard (ask the human)
@@ -76,7 +76,7 @@ Then ask the human for Domain, Client ID, and Client Secret from that Settings t
 
 ```dotenv
 APP_BASE_URL=http://localhost:3000
-AUTH0_DOMAIN=your-tenant.us.auth0.com
+AUTH0_DOMAIN=focusotter-apps.us.auth0.com
 AUTH0_CLIENT_ID=...
 AUTH0_CLIENT_SECRET=...
 AUTH0_SECRET=            # generate: openssl rand -hex 32

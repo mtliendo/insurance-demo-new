@@ -148,3 +148,4 @@ alter table claims add column if not exists ciba_yes_threshold integer;
 alter table claims drop constraint if exists claims_status_check;
 alter table claims add constraint claims_status_check
   check (status in ('pending','awaiting_approval','approved','denied','cancelled'));
+alter table claims add column if not exists cancel_ciba_status text;

@@ -19,6 +19,7 @@ const MAX_TURNS = 6
 export async function runAgent(
   claim: Claim,
   history: ChatMessage[],
+  actor: { sub: string },
 ): Promise<{ reply: string; claim: Claim }> {
   const firstUser = history.findIndex((m) => m.role === 'user')
   const trimmed = firstUser >= 0 ? history.slice(firstUser) : []
@@ -30,7 +31,7 @@ export async function runAgent(
     instructions: SYSTEM_PROMPT + '\n\n' + claimContext(current),
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     stopWhen: stepCountIs(MAX_TURNS),
-    tools: claimTools(current),
+    tools: claimTools(current, actor),
     messages: trimmed.map((m) => ({
       role: m.role,
       content: m.content,

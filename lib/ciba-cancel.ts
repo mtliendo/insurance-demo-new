@@ -1,6 +1,6 @@
 import { bindingMessageForCancel } from '@/lib/binding-message'
 import { cancelCibaWaitMs, startCiba, waitForCiba } from '@/lib/ciba'
-import { cancelClaim, getClaim } from '@/lib/claims'
+import { cancelClaim, getClaim, setCancelCibaStatus } from '@/lib/claims'
 import type { Claim } from '@/lib/types'
 
 function namedClaimMatches(claimId: string, named: string | undefined): boolean {
@@ -13,16 +13,29 @@ function namedClaimMatches(claimId: string, named: string | undefined): boolean 
   return id.includes(needle) || compact.startsWith(compactNeedle) || compact.includes(compactNeedle)
 }
 
+export type CancelActor = {
+  /** Auth0 `sub` from the current session — login_hint iss_sub. */
+  sub: string
+}
+
 /**
- * CIBA-gated cancel for the claim in this chat. Emails the policyholder
- * (`login_hint` iss_sub = `claim.userId`), waits for approval, then
- * flips status to `cancelled`. Does not touch the board grant, Token
- * Vault, or `ciba_authorizations`.
+ * CIBA-gated cancel for the claim in this chat. Emails the **signed-in
+ * user** (`login_hint` iss_sub = session.sub, iss = https://${AUTH0_DOMAIN}/),
+ * waits for approval, then flips status to `cancelled`. Does not touch
+ * the board grant, Token Vault, or `ciba_authorizations`.
  */
 export async function requestCancelClaim(
   claim: Claim,
-  namedClaimId?: string,
+  namedClaimId: string | undefined,
+  actor: CancelActor,
 ): Promise<string> {
+  if (!actor.sub) {
+    return [
+      'No signed-in Auth0 sub on this session. CIBA was NOT sent.',
+      'The claim was NOT cancelled. Tell the user to log in again.',
+    ].join(' ')
+  }
+
   if (namedClaimId && !namedClaimMatches(claim.id, namedClaimId)) {
     return [
       `That id does not match this chat's claim (${claim.id}).`,
@@ -37,10 +50,13 @@ export async function requestCancelClaim(
 
   const bindingMessage = bindingMessageForCancel(latest.id)
 
+  await setCancelCibaStatus(latest.id, 'pending')
+
   let started: Awaited<ReturnType<typeof startCiba>>
   try {
-    started = await startCiba(latest.userId, bindingMessage)
+    started = await startCiba(actor.sub, bindingMessage)
   } catch (error) {
+    await setCancelCibaStatus(latest.id, 'denied')
     const message = error instanceof Error ? error.message : 'bc-authorize failed'
     return [
       `Could not start CIBA (${message}). The claim was NOT cancelled.`,
@@ -57,6 +73,7 @@ export async function requestCancelClaim(
 
   if (waited.status === 'approved') {
     try {
+      await setCancelCibaStatus(latest.id, 'approved')
       const cancelled = await cancelClaim(latest.id)
       if (!cancelled) {
         return [
@@ -78,23 +95,25 @@ export async function requestCancelClaim(
     }
   }
 
+  await setCancelCibaStatus(latest.id, 'denied')
+
   if (waited.status === 'denied') {
     return [
       'CIBA was denied or the Auth0 request expired. The claim was NOT cancelled and is unchanged.',
-      'Tell the user that.',
+      'Tell the user the cancel request was denied.',
     ].join(' ')
   }
 
   if (waited.status === 'timeout') {
     return [
       'Timed out waiting for the CIBA email approval. The claim was NOT cancelled.',
-      'Tell the user to check their email (binding message starts with Cancel-claim-#)',
+      'Tell the user the cancel request is denied/timed out, to check their email (binding message starts with Cancel-claim-#),',
       'and ask again if they still want to cancel.',
     ].join(' ')
   }
 
   return [
     `CIBA error (${waited.error || 'unknown'}). The claim was NOT cancelled.`,
-    'Tell the user that. Do not say the demo is broken.',
+    'Tell the user the cancel request was denied. Do not say the demo is broken.',
   ].join(' ')
 }

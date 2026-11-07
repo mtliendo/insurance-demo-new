@@ -37,7 +37,9 @@ export async function POST(
   const history = await listMessages(claim.id)
 
   try {
-    const { reply, claim: updated } = await runAgent(claim, history)
+    const { reply, claim: updated } = await runAgent(claim, history, {
+      sub: session.user.sub ?? '',
+    })
     await addMessage(claim.id, 'assistant', reply)
 
     const snapshot: ClaimSnapshot = await buildClaimSnapshot(updated)
