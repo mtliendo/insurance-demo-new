@@ -5,7 +5,8 @@ import { addMessage, getClaim, listMessages } from '@/lib/claims'
 import { buildClaimSnapshot } from '@/lib/snapshot'
 import type { ClaimSnapshot } from '@/lib/types'
 
-export const maxDuration = 60
+/** 90s so `cancel_claim` can wait on CIBA email (~70s) plus the model turn. */
+export const maxDuration = 90
 
 /**
  * One conversational turn. Replaces `POST /ai-agent` on the API Gateway HTTP

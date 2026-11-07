@@ -153,8 +153,9 @@ Auth0 picks the channel from `requested_expiry`:
 This demo always sends `requested_expiry=600`. `login_hint` is `iss_sub` (that
 board member's Auth0 `sub`), never a raw email. `binding_message` is at most
 64 characters, charset `A-Za-z0-9+-_.,:#`, no spaces
-(`Hulk-smash-claim-<id>`). The authorizing user must have a **verified**
-email or they cannot sit on the board.
+(`Hulk-smash-claim-<id>`). `cancel_claim` uses `Cancel-claim-#<id>` and
+emails the policyholder, not the board. The authorizing user must have a
+**verified** email or they cannot sit on the board (or receive cancel CIBA).
 
 ### Token Vault — host Google Calendar only
 
@@ -304,6 +305,8 @@ Then walk the happy path:
 | Auth0 `slow_down` on stage | Polls must honor stored `interval_sec` (floor 5). Do not reset after `authorization_pending`. |
 | Board member missing from pick | Email not verified on the Auth0 user, or they are the configured host |
 | Calendar event missing after the threshold yeses | Token Vault Google connection dropped; reconnect on `/settings` |
+| Cancel CIBA email never arrives | Same grant as the board: CIBA + **email** channel enabled, Asynchronous Approval template on, filer has a **verified** email. Binding message is `Cancel-claim-#<id>` (no spaces). Google Calendar is **not** required for cancel. |
+| `cancel my claim` times out | Approve the email within ~70s (optional `CIBA_CANCEL_WAIT_MS`). Claim stays unchanged; say it again after you approve. |
 
 ---
 

@@ -1,5 +1,6 @@
 import { tool } from 'ai'
 import { z } from 'zod'
+import { requestCancelClaim } from '@/lib/ciba-cancel'
 import { cibaStartAgentMessage, startCibaForSubmittedClaim } from '@/lib/ciba-flow'
 import { flagFraud, saveClaimDetails, submitClaim } from '@/lib/claims'
 import { MOCK_VEHICLE_DATA } from '@/lib/agent/system-prompt'
@@ -77,6 +78,20 @@ Ask the user if they are ready to submit this claim for processing.`
         const ciba = await startCibaForSubmittedClaim(claim.id)
         return cibaStartAgentMessage(ciba)
       },
+    }),
+
+    cancel_claim: tool({
+      description:
+        'Cancel this claim after the user asks to cancel it. Starts a CIBA email to the policyholder (binding message Cancel-claim-#<id>) and WAITS for them to Accept or Decline. Do not ask for a second chat confirmation — the email is the confirmation. Call this when they say "cancel my claim" or name this claim. On approval the claim status becomes cancelled. On denial or timeout the claim is unchanged. Tell the user whatever the tool result says.',
+      inputSchema: z.object({
+        claimId: z
+          .string()
+          .optional()
+          .describe(
+            'Claim id if the user named one. Omit to cancel the claim in this chat.',
+          ),
+      }),
+      execute: async ({ claimId }) => requestCancelClaim(claim, claimId),
     }),
   }
 }

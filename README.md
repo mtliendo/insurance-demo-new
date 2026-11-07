@@ -27,7 +27,7 @@ on purpose — they are the point of the talk:
 | **Regular Web Application** + server session cookie | `@auth0/nextjs-auth0` v4 in [proxy.ts](proxy.ts) / [lib/auth0.ts](lib/auth0.ts). Not a SPA. Needs a client secret. |
 | **Email verification** | Unverified joiners watch `/join`; they cannot sit on the CIBA board |
 | **Custom ID token claims** | Optional post-login Action sets `https://claims.interview-demo.com/policyId` |
-| **CIBA (Client-Initiated Backchannel Authentication)** | Seated board approves the claim from email. `requested_expiry=600` selects the **email** channel, not Guardian. Requires **Essentials (or Professional) + Auth0 for AI Agents add-on**. |
+| **CIBA (Client-Initiated Backchannel Authentication)** | Seated board approves the claim from email. `requested_expiry=600` selects the **email** channel, not Guardian. Requires **Essentials (or Professional) + Auth0 for AI Agents add-on**. Same grant cancels a claim: `cancel_claim` emails the **policyholder** (`Cancel-claim-#<id>`), waits for Accept/Decline, then sets status `cancelled`. |
 | **CIBA email / Asynchronous Approval template** | Branding → Email Templates → Asynchronous Approval. `login_hint` is `iss_sub`. |
 | **Token Vault** | Host-only Google Calendar connect on `/settings` (`/auth/connect`). Audience never sees Google consent. |
 | **First-party confidential client** | Required for the CIBA grant (`oidc_conformant`, not `token_endpoint_auth_method: none`) |
@@ -101,15 +101,17 @@ only — no calendar scope, no `offline_access`. Only an admin hits
 `/settings` → `/auth/connect` for Google Calendar.
 
 **The agent.** [lib/agent/](lib/agent/) is a Vercel AI SDK `generateText`
-loop. Same conversation, same three tools. Calls go through the AI Gateway
+loop. Same conversation, four tools. Calls go through the AI Gateway
 (`anthropic/claude-opus-5` by default). `publish_claim_submission` flips
 the claim to `awaiting_approval` and calls `startCibaForSubmittedClaim`
 (admin session only). A non-admin filer gets `not_host`; `GET /api/board`
-on the open `/host` console starts the same grant.
+on the open `/host` console starts the same grant. `cancel_claim` emails
+the policyholder (not the board), waits on CIBA, then sets `cancelled`.
 
 **State and realtime.** There is no websocket. `/file-claim` and `/host`
 refresh UI every 2s. Auth0 `/oauth/token` is only hit when a pending
-`auth_req_id` is due.
+`auth_req_id` is due (board poll, or `cancel_claim` waiting on the
+policyholder).
 
 ### Routes
 
@@ -183,3 +185,27 @@ threshold). Those persist in Neon `demo_settings`. Raise to **6 / 3** on
    calendar event lands on the host Google account.
 
 Between runs, tap **Start over** on `/file-claim` or `/host` (admin only).
+
+## Cancel a claim (CIBA)
+
+Same Auth0 app and CIBA email grant as the board — no new secrets. This
+CIBA goes to the **person in the chat** (policyholder `sub`), not the
+seated board. Google Calendar / Token Vault is not required.
+
+**Auth0 dashboard (already needed for the board demo):**
+
+1. Application → **Grant Types** → enable **Client Initiated Backchannel Authentication (CIBA)**.
+2. Same app → CIBA section → enable **email**.
+3. **Branding → Email Templates → Asynchronous Approval** enabled.
+4. The filer must have a **verified** email.
+
+**Demo script:**
+
+1. On `/file-claim`, file a claim as usual (or stop after details are saved).
+2. Type: **`cancel my claim`** (or name it, e.g. the 8-char ID on the manifest).
+3. Chat shows **Waiting for your approval, check your email** while the tool waits.
+4. Open the Asynchronous Approval email. Request code looks like `Cancel-claim-#<id>` (no spaces; matches the manifest ID).
+5. **Accept** → agent says the claim is cancelled; manifest badge **Cancelled**.
+6. **Decline** (or wait ~70s) → claim is unchanged; agent says so. Type `cancel my claim` again if you still want it gone.
+
+Optional: `CIBA_CANCEL_WAIT_MS` in `.env.local` (default `70000`). Keep it under the chat route `maxDuration` (90s).

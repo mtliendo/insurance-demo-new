@@ -11,7 +11,7 @@ create table if not exists claims (
   incident_location    text,
   damage_extent        text,
   status               text        not null default 'pending'
-                         check (status in ('pending','awaiting_approval','approved','denied')),
+                         check (status in ('pending','awaiting_approval','approved','denied','cancelled')),
   fraud_flagged        boolean     not null default false,
   fraud_reason         text,
   created_at           timestamptz not null default now(),
@@ -143,3 +143,8 @@ alter table claims add column if not exists ciba_block_reason text;
 -- Frozen at CIBA start so a later /host save cannot change the grant.
 alter table claims add column if not exists ciba_board_size integer;
 alter table claims add column if not exists ciba_yes_threshold integer;
+
+-- cancel_claim CIBA sets status=cancelled after the policyholder accepts.
+alter table claims drop constraint if exists claims_status_check;
+alter table claims add constraint claims_status_check
+  check (status in ('pending','awaiting_approval','approved','denied','cancelled'));

@@ -173,6 +173,8 @@ export function FileClaimClient({
   const remaining = board.requiredApprovals - approvalCount
   const isApproved = claim.status === 'approved'
   const isAwaiting = claim.status === 'awaiting_approval'
+  const isCancelled = claim.status === 'cancelled'
+  const waitingForCancelApproval = isSending && lastUserAskedToCancel(messages)
 
   return (
     <div className="hud-grid relative min-h-screen overflow-hidden p-4 md:p-8">
@@ -297,7 +299,11 @@ export function FileClaimClient({
                           />
                         ))}
                       </span>
-                      <span className="hud-label text-[0.6rem]">Analyzing</span>
+                      <span className="hud-label text-[0.6rem]">
+                        {waitingForCancelApproval
+                          ? 'Waiting for your approval, check your email'
+                          : 'Analyzing'}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -328,7 +334,9 @@ export function FileClaimClient({
 
           {/* ---- Claim manifest -------------------------------------------- */}
           <Card
-            data-stone={isApproved ? 'time' : isAwaiting ? 'mind' : 'space'}
+            data-stone={
+              isApproved ? 'time' : isAwaiting ? 'mind' : isCancelled ? 'reality' : 'space'
+            }
             className="animate-rise stagger-2 hud-panel h-fit rounded-none border-transparent lg:w-80"
           >
             <span className="absolute inset-x-0 top-0 h-0.5 bg-[var(--stone)] transition-colors duration-700" />
@@ -365,12 +373,24 @@ export function FileClaimClient({
               <div>
                 <div className="flex items-center justify-between">
                   <span className="hud-label text-[0.6rem]">Status</span>
-                  <Badge variant={isApproved ? 'success' : isAwaiting ? 'warning' : 'secondary'}>
+                  <Badge
+                    variant={
+                      isApproved
+                        ? 'success'
+                        : isAwaiting
+                          ? 'warning'
+                          : isCancelled
+                            ? 'destructive'
+                            : 'secondary'
+                    }
+                  >
                     {isAwaiting
                       ? `CIBA ${approvalCount}/${board.requiredApprovals}`
                       : isApproved
                         ? 'Approved'
-                        : claim.status}
+                        : isCancelled
+                          ? 'Cancelled'
+                          : claim.status}
                   </Badge>
                 </div>
 
@@ -399,6 +419,12 @@ export function FileClaimClient({
                   </div>
                 )}
 
+                {isCancelled && (
+                  <p className="mt-3 text-xs text-destructive">
+                    This claim was cancelled after you approved the CIBA email.
+                  </p>
+                )}
+
                 {isApproved && (
                   <div className="animate-fade-in mt-3 space-y-2 text-sm text-stone-time">
                     <div className="flex items-center gap-2">
@@ -419,6 +445,12 @@ export function FileClaimClient({
       </div>
     </div>
   )
+}
+
+/** True when the in-flight turn is a cancel request (CIBA pending beat). */
+function lastUserAskedToCancel(messages: ClaimSnapshot['messages']): boolean {
+  const last = [...messages].reverse().find((m) => m.role === 'user')
+  return last ? /\bcancel(?:l?ed|l?ing)?\b/i.test(last.content) : false
 }
 
 /**

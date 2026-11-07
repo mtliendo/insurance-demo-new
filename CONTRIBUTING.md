@@ -69,10 +69,13 @@ Coding agents (Cursor, Claude Code, etc.) should:
 5. Never print a filled-in `.env.local`.
 
 The claims agent itself lives in [lib/agent/](lib/agent/). It is a
-`generateText` tool loop (Vercel AI SDK) with three tools:
-`save_claim_details`, `notify_fraud`, `publish_claim_submission`. Tools
-write Neon; `prepareStep` re-reads the claim so the next turn matches the
-database.
+`generateText` tool loop (Vercel AI SDK) with four tools:
+`save_claim_details`, `notify_fraud`, `publish_claim_submission`,
+`cancel_claim`. Tools write Neon; `prepareStep` re-reads the claim so the
+next turn matches the database. `cancel_claim` emails the policyholder
+via the same CIBA loop in [lib/ciba.ts](lib/ciba.ts) (`requested_expiry=600`)
+and waits for Accept/Decline before flipping status to `cancelled`. It
+does not write `ciba_authorizations` (those rows are the board grant).
 
 On stage there is a second kind of “agent”: the presenter. They are an
 **admin** if their login email is `@okta.com` or `admin@focusotter.com`.
@@ -156,7 +159,7 @@ This app always sends `requested_expiry=600`. If you leave email off, or
 send 300, CIBA fails or goes to Guardian. `login_hint` is `iss_sub` (the
 board member's Auth0 `sub`), never a raw email. `binding_message` is at
 most 64 characters, charset `A-Za-z0-9+-_.,:#`, no spaces
-(`Hulk-smash-claim-<id>`).
+(`Hulk-smash-claim-<id>`). `cancel_claim` uses `Cancel-claim-#<id>`.
 
 ### 3. Email provider and Asynchronous Approval template
 
@@ -225,6 +228,7 @@ app/            pages + route handlers
 components/     client components (chat, join, host, board) + shadcn/ui
 lib/agent/      Vercel AI SDK tool loop (gateway + Anthropic default)
 lib/ciba.ts     /bc-authorize + CIBA token poll (not @auth0/ai)
+lib/ciba-cancel.ts  cancel_claim tool: policyholder CIBA, then status=cancelled
 lib/board.ts    joiners + pick
 lib/board-config.ts  board rules + demo host identity
 lib/host.ts     admin email gate

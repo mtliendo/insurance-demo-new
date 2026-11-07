@@ -33,14 +33,14 @@ export function Reveal({
     // mount — a tall viewport or a restored scroll position puts most of the
     // page in view before a single scroll event fires.
     if (typeof IntersectionObserver === 'undefined') {
-      setShown(true)
-      return
+      const id = requestAnimationFrame(() => setShown(true))
+      return () => cancelAnimationFrame(id)
     }
 
     const rect = el.getBoundingClientRect()
     if (rect.top < window.innerHeight && rect.bottom > 0) {
-      setShown(true)
-      return
+      const id = requestAnimationFrame(() => setShown(true))
+      return () => cancelAnimationFrame(id)
     }
 
     const observer = new IntersectionObserver(

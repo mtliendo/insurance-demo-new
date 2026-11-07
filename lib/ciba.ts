@@ -1,4 +1,5 @@
 import { sanitizeBindingMessage } from '@/lib/binding-message'
+import { CIBA_INTERVAL_FLOOR, floorInterval, nextPollInterval } from '@/lib/ciba-interval'
 
 /** Auth0 sends email when requested_expiry is 301–259200s. ≤300 is Guardian push. */
 export const CIBA_EMAIL_EXPIRY_SECONDS = 600
@@ -107,4 +108,60 @@ export async function pollCiba(authReqId: string) {
     status: 'error' as const,
     error: json.error_description || error || 'token poll failed',
   }
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+/** Default how long `cancel_claim` waits for the policyholder's CIBA email. */
+const DEFAULT_CANCEL_WAIT_MS = 70_000
+
+/**
+ * Optional `CIBA_CANCEL_WAIT_MS` (milliseconds). Floor 10s, cap 240s.
+ * Keep this under the chat route `maxDuration` so the tool can finish.
+ */
+export function cancelCibaWaitMs(): number {
+  const raw = process.env.CIBA_CANCEL_WAIT_MS
+  if (!raw?.trim()) return DEFAULT_CANCEL_WAIT_MS
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return DEFAULT_CANCEL_WAIT_MS
+  return Math.min(240_000, Math.max(10_000, n))
+}
+
+export type CibaWaitResult =
+  | { status: 'approved' }
+  | { status: 'denied'; error?: string }
+  | { status: 'error'; error: string }
+  | { status: 'timeout' }
+
+/**
+ * Poll `/oauth/token` until CIBA is approved, denied, errors, or the
+ * wait budget runs out. Honors Auth0's interval (floor 5s) and
+ * `slow_down`. Used by `cancel_claim` so the tool itself waits — we do
+ * **not** write `ciba_authorizations` (those rows are the board grant).
+ */
+export async function waitForCiba(
+  authReqId: string,
+  options?: { timeoutMs?: number; intervalSec?: number },
+): Promise<CibaWaitResult> {
+  const timeoutMs = options?.timeoutMs ?? cancelCibaWaitMs()
+  const deadline = Date.now() + timeoutMs
+  let intervalSec = floorInterval(options?.intervalSec ?? CIBA_INTERVAL_FLOOR)
+
+  while (Date.now() < deadline) {
+    const waitMs = Math.min(intervalSec * 1000, Math.max(0, deadline - Date.now()))
+    if (waitMs > 0) await sleep(waitMs)
+    if (Date.now() >= deadline) break
+
+    const result = await pollCiba(authReqId)
+    if (result.status === 'approved') return { status: 'approved' }
+    if (result.status === 'denied') return { status: 'denied', error: result.error }
+    if (result.status === 'error') {
+      return { status: 'error', error: result.error || 'token poll failed' }
+    }
+    intervalSec = nextPollInterval(intervalSec, result.interval, result.slowDown)
+  }
+
+  return { status: 'timeout' }
 }

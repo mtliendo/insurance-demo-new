@@ -1,4 +1,9 @@
-export type ClaimStatus = 'pending' | 'awaiting_approval' | 'approved' | 'denied'
+export type ClaimStatus =
+  | 'pending'
+  | 'awaiting_approval'
+  | 'approved'
+  | 'denied'
+  | 'cancelled'
 
 export type CibaStatus = 'pending' | 'approved' | 'denied' | 'error'
 

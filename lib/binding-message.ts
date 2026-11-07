@@ -13,3 +13,9 @@ export function bindingMessageForClaim(claimId: string) {
   const short = claimId.replace(/-/g, '').slice(0, 8)
   return sanitizeBindingMessage(`Hulk-smash-claim-${short}`)
 }
+
+/** Policyholder CIBA to cancel a claim. Charset has no spaces or `?`. */
+export function bindingMessageForCancel(claimId: string) {
+  const short = claimId.replace(/-/g, '').slice(0, 8)
+  return sanitizeBindingMessage(`Cancel-claim-#${short}`)
+}
