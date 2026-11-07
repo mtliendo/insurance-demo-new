@@ -1,4 +1,5 @@
 import { isBoardDemoEnabled } from '@/lib/demo-flags'
+import { nowInChicagoLabel } from '@/lib/google-calendar'
 import type { Claim } from '@/lib/types'
 
 /** Rendered as a real link in the /file-claim chat bubble. */
@@ -40,10 +41,12 @@ ${
     ? `- That tool submits the claim. Only the demo host session can start CIBA (same grant as POST /api/ciba). A non-host filer gets not_host — the operator console on /host starts CIBA automatically on its next poll.
 - After the tool returns, tell the user whether the board was emailed. If the result is not_host, tell them the seated board is being emailed / the operator console is starting it. Do not tell a non-host to go click Send CIBA. If CIBA started or is already live, thank them and say the board was emailed. If start was blocked (host Google Calendar not connected, no board seated, board short of the saved size), say why and that the operator console will start it once that is fixed. Never say the board was emailed if the tool said it was not. Never say the operator was emailed. Do not say the demo is broken.
 - If the claim is already awaiting_approval and CIBA was blocked, you may call publish_claim_submission again when they confirm send after the block is fixed.`
-    : `- That tool files the claim and, when this session is an admin with Google Calendar connected, writes one event via Auth0 Token Vault. Tell the user whether the calendar event was written. Do not mention a CIBA board, QR code, or seated members.
-- If they ask to put the claim on the calendar and it is not submitted yet, use publish_claim_submission (they are confirming file + calendar). If it is already submitted/approved, use write_calendar_event.
+    : `- That tool files the claim. It does not write a calendar event. Do not mention a CIBA board, QR code, or seated members.
+- If they ask to put the claim on the calendar, set up an appointment, or speak with an agent, first ask for a good date and time in America/Chicago. Do not call write_calendar_event until they give one. Interpret relative times like "tomorrow at 2pm" using the current America/Chicago date in the claim progress block. Default duration is 30 minutes unless they say otherwise.
+- After they give a time: if the claim is not submitted yet, use publish_claim_submission (they are confirming file + calendar), then write_calendar_event with that start. If it is already submitted/approved, use write_calendar_event.
+- After write_calendar_event returns, tell the user the event title, the start and end in CT, and include the htmlLink.
 - If Google Calendar is not connected, tell them to connect Google Calendar in ${SETTINGS_CHAT_LINK}. Include that markdown link in your reply. Tell them to come back to this same chat after connecting — the conversation and claim stay here. Do not tell them to start a new claim.
-- If they return and say they connected Google, or Google Calendar is connected and no event is written, use write_calendar_event.`
+- If they return and say they connected Google, or Google Calendar is connected and no event is written, still ask for a date and time if you do not have one, then use write_calendar_event. Do not call it until they have given a time.`
 }
 - When the user asks to cancel this claim (e.g. "cancel my claim", or they name this claim), use the cancel_claim tool. Do not ask them to confirm in chat first — CIBA email to the signed-in user is the confirmation. The tool starts the email and returns while Cancel CIBA is pending. Tell them to check their email and Accept. Do not say the claim is cancelled, denied, or timed out unless the tool result or Cancel CIBA status already says that. If the status is already cancelled, do not file or submit; tell them this claim is cancelled.
 
@@ -75,6 +78,7 @@ export function claimContext(
         : 'unknown'
   return `
 Current Claim Progress:
+- Current date/time (America/Chicago): ${nowInChicagoLabel()}
 - User ID: ${claim.userId} (captured)
 - Policy Number: ${claim.policyId} (captured)
 - Incident Description: ${claim.incidentDescription || 'NOT YET PROVIDED - need to ask'}

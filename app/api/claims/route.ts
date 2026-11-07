@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     }
     if (!isBoardDemoEnabled()) {
       const wrote = await tryWriteHostCalendarEvent(existing.id, session.user)
-      if (wrote === 'written') {
+      if (wrote.status === 'written') {
         await addMessage(existing.id, 'assistant', CALENDAR_CONNECTED_CHAT)
       }
     }
