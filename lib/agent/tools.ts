@@ -118,7 +118,7 @@ Ask the user if they are ready to submit this claim for processing.`
 
     cancel_claim: tool({
       description:
-        'Cancel this claim after the user asks to cancel it. Starts a CIBA email to the signed-in user (login_hint iss_sub of this session, binding message Cancel-claim-#<id>) and WAITS for them to Accept or Decline. Do not ask for a second chat confirmation — the email is the confirmation. Call this when they say "cancel my claim" or name this claim. On approval the claim status becomes cancelled. On denial or timeout the claim is unchanged. Tell the user whatever the tool result says.',
+        'Cancel this claim after the user asks to cancel it. Starts a CIBA email to the signed-in user (login_hint iss_sub of this session, binding message Cancel-claim-#<id>) and returns immediately while status is pending. Do not ask for a second chat confirmation — the email is the confirmation. Call this when they say "cancel my claim" or name this claim. Tell them to check their email and Accept. Do not say the claim is cancelled, denied, or timed out unless the tool result says so. The page polls Auth0 until they Accept, Decline, or the request expires (~5 minutes).',
       inputSchema: z.object({
         claimId: z
           .string()

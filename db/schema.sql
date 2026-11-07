@@ -149,3 +149,7 @@ alter table claims drop constraint if exists claims_status_check;
 alter table claims add constraint claims_status_check
   check (status in ('pending','awaiting_approval','approved','denied','cancelled'));
 alter table claims add column if not exists cancel_ciba_status text;
+alter table claims add column if not exists cancel_ciba_auth_req_id text;
+alter table claims add column if not exists cancel_ciba_interval_sec integer;
+alter table claims add column if not exists cancel_ciba_expires_at timestamptz;
+alter table claims add column if not exists cancel_ciba_last_polled_at timestamptz;

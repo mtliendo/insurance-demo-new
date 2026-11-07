@@ -295,7 +295,7 @@ export function FileClaimClient({
                   </div>
                 ))}
 
-                {isSending && (
+                {(isSending || cancelCibaStatus === 'pending') && (
                   <div className="animate-message-in flex justify-start gap-3">
                     <span className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-hud/12 ring-1 ring-hud/40">
                       <ShieldHalf className="h-3.5 w-3.5 text-hud" />

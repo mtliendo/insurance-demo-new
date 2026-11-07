@@ -1,5 +1,6 @@
 import { clearSeatedBoard } from '@/lib/board'
 import { ensureBoardRulesSchema } from '@/lib/board-config'
+import { CIBA_INTERVAL_FLOOR } from '@/lib/ciba-interval'
 import { sql } from '@/lib/db'
 import type {
   CancelCibaStatus,
@@ -25,6 +26,10 @@ async function ensureClaimStatusSchema(): Promise<void> {
   }
   try {
     await sql`alter table claims add column if not exists cancel_ciba_status text`
+    await sql`alter table claims add column if not exists cancel_ciba_auth_req_id text`
+    await sql`alter table claims add column if not exists cancel_ciba_interval_sec integer`
+    await sql`alter table claims add column if not exists cancel_ciba_expires_at timestamptz`
+    await sql`alter table claims add column if not exists cancel_ciba_last_polled_at timestamptz`
     statusSchemaReady = true
   } catch (error) {
     console.error('Could not add cancel_ciba_status column:', error)
@@ -185,6 +190,79 @@ export async function setCancelCibaStatus(
     update claims set cancel_ciba_status = ${status}, updated_at = now()
     where id = ${claimId}
   `
+}
+
+/** Persist the policyholder cancel CIBA so GET /api/claims/[id] can poll Auth0. */
+export async function saveCancelCibaGrant(
+  claimId: string,
+  grant: { authReqId: string; intervalSec: number; expiresAt: Date },
+): Promise<void> {
+  await ensureClaimStatusSchema()
+  await sql`
+    update claims set
+      cancel_ciba_auth_req_id = ${grant.authReqId},
+      cancel_ciba_interval_sec = ${grant.intervalSec},
+      cancel_ciba_expires_at = ${grant.expiresAt},
+      cancel_ciba_last_polled_at = now(),
+      updated_at = now()
+    where id = ${claimId} and cancel_ciba_status = 'pending'
+  `
+}
+
+/**
+ * Claim the next Auth0 poll slot for cancel CIBA. Empty means another
+ * request already ticked this claim inside the stored interval.
+ */
+export async function claimCancelCibaPollSlot(
+  claimId: string,
+): Promise<{ authReqId: string; intervalSec: number } | null> {
+  await ensureClaimStatusSchema()
+  const rows = (await sql`
+    update claims
+    set cancel_ciba_last_polled_at = now(), updated_at = now()
+    where id = ${claimId}
+      and cancel_ciba_status = 'pending'
+      and cancel_ciba_auth_req_id is not null
+      and (
+        cancel_ciba_last_polled_at is null
+        or cancel_ciba_last_polled_at
+          + (greatest(coalesce(cancel_ciba_interval_sec, ${CIBA_INTERVAL_FLOOR}), ${CIBA_INTERVAL_FLOOR})
+            * interval '1 second')
+          <= now()
+      )
+    returning cancel_ciba_auth_req_id, cancel_ciba_interval_sec
+  `) as { cancel_ciba_auth_req_id: string; cancel_ciba_interval_sec: number | null }[]
+  const row = rows[0]
+  if (!row?.cancel_ciba_auth_req_id) return null
+  return {
+    authReqId: row.cancel_ciba_auth_req_id,
+    intervalSec: row.cancel_ciba_interval_sec ?? CIBA_INTERVAL_FLOOR,
+  }
+}
+
+export async function updateCancelCibaInterval(
+  claimId: string,
+  intervalSec: number,
+): Promise<void> {
+  await sql`
+    update claims
+    set cancel_ciba_interval_sec = ${intervalSec}, updated_at = now()
+    where id = ${claimId} and cancel_ciba_status = 'pending'
+  `
+}
+
+/** Flip pending → approved/denied once. Callers then cancel the claim or not. */
+export async function completeCancelCiba(
+  claimId: string,
+  status: Exclude<CancelCibaStatus, 'pending'>,
+): Promise<boolean> {
+  await ensureClaimStatusSchema()
+  const rows = (await sql`
+    update claims set cancel_ciba_status = ${status}, updated_at = now()
+    where id = ${claimId} and cancel_ciba_status = 'pending'
+    returning id
+  `) as { id: string }[]
+  return rows.length > 0
 }
 
 /**

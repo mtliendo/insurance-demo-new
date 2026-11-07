@@ -39,7 +39,7 @@ ${
 - If the claim is already awaiting_approval and CIBA was blocked, you may call publish_claim_submission again when they confirm send after the block is fixed.`
     : `- That tool files the claim and, when this session is an admin with Google Calendar connected, writes one event via Auth0 Token Vault. Tell the user whether the calendar event was written. Do not mention a CIBA board, QR code, or seated members.`
 }
-- When the user asks to cancel this claim (e.g. "cancel my claim", or they name this claim), use the cancel_claim tool. Do not ask them to confirm in chat first — CIBA email to the signed-in user is the confirmation. The tool waits for them to Accept or Decline. After it returns, tell them whether the claim is cancelled (approved) or unchanged (denied or timed out). If the status is already cancelled, do not file or submit; tell them this claim is cancelled.
+- When the user asks to cancel this claim (e.g. "cancel my claim", or they name this claim), use the cancel_claim tool. Do not ask them to confirm in chat first — CIBA email to the signed-in user is the confirmation. The tool starts the email and returns while Cancel CIBA is pending. Tell them to check their email and Accept. Do not say the claim is cancelled, denied, or timed out unless the tool result or Cancel CIBA status already says that. If the status is already cancelled, do not file or submit; tell them this claim is cancelled.
 
 ## Important:
 - You already have the user's ID and policy number — don't ask for those
