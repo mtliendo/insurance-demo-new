@@ -1,6 +1,9 @@
 import { isBoardDemoEnabled } from '@/lib/demo-flags'
 import type { Claim } from '@/lib/types'
 
+/** Rendered as a real link in the /file-claim chat bubble. */
+export const SETTINGS_CHAT_LINK = '[Settings](/settings)'
+
 // Mock vehicle data for the policyholder — ported from the CDK backend.
 export const MOCK_VEHICLE_DATA = {
   make: 'Honda',
@@ -37,7 +40,10 @@ ${
     ? `- That tool submits the claim. Only the demo host session can start CIBA (same grant as POST /api/ciba). A non-host filer gets not_host — the operator console on /host starts CIBA automatically on its next poll.
 - After the tool returns, tell the user whether the board was emailed. If the result is not_host, tell them the seated board is being emailed / the operator console is starting it. Do not tell a non-host to go click Send CIBA. If CIBA started or is already live, thank them and say the board was emailed. If start was blocked (host Google Calendar not connected, no board seated, board short of the saved size), say why and that the operator console will start it once that is fixed. Never say the board was emailed if the tool said it was not. Never say the operator was emailed. Do not say the demo is broken.
 - If the claim is already awaiting_approval and CIBA was blocked, you may call publish_claim_submission again when they confirm send after the block is fixed.`
-    : `- That tool files the claim and, when this session is an admin with Google Calendar connected, writes one event via Auth0 Token Vault. Tell the user whether the calendar event was written. Do not mention a CIBA board, QR code, or seated members.`
+    : `- That tool files the claim and, when this session is an admin with Google Calendar connected, writes one event via Auth0 Token Vault. Tell the user whether the calendar event was written. Do not mention a CIBA board, QR code, or seated members.
+- If they ask to put the claim on the calendar and it is not submitted yet, use publish_claim_submission (they are confirming file + calendar). If it is already submitted/approved, use write_calendar_event.
+- If Google Calendar is not connected, tell them to connect Google Calendar in ${SETTINGS_CHAT_LINK}. Include that markdown link in your reply. Tell them to come back to this same chat after connecting — the conversation and claim stay here. Do not tell them to start a new claim.
+- If they return and say they connected Google, or Google Calendar is connected and no event is written, use write_calendar_event.`
 }
 - When the user asks to cancel this claim (e.g. "cancel my claim", or they name this claim), use the cancel_claim tool. Do not ask them to confirm in chat first — CIBA email to the signed-in user is the confirmation. The tool starts the email and returns while Cancel CIBA is pending. Tell them to check their email and Accept. Do not say the claim is cancelled, denied, or timed out unless the tool result or Cancel CIBA status already says that. If the status is already cancelled, do not file or submit; tell them this claim is cancelled.
 
@@ -57,7 +63,16 @@ ${
  * system prompt. Same idea here, except the values come from Neon rather than
  * from state the browser round-tripped.
  */
-export function claimContext(claim: Claim): string {
+export function claimContext(
+  claim: Claim,
+  extras?: { googleConnected?: boolean },
+): string {
+  const google =
+    extras?.googleConnected === true
+      ? 'connected'
+      : extras?.googleConnected === false
+        ? 'NOT connected'
+        : 'unknown'
   return `
 Current Claim Progress:
 - User ID: ${claim.userId} (captured)
@@ -70,6 +85,8 @@ Current Claim Progress:
       ? '\n- This claim is cancelled. Do not file or submit.'
       : ''
   }
+- Google Calendar: ${google}
+- Calendar event: ${claim.calendarEventId ? 'written' : 'not written'}
 - Cancel CIBA: ${claim.cancelCibaStatus ?? 'not started'}
 - CIBA: ${
     isBoardDemoEnabled()

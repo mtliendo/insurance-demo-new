@@ -4,21 +4,53 @@ import { requestCancelClaim } from '@/lib/ciba-cancel'
 import {
   cibaStartAgentMessage,
   startCibaForSubmittedClaim,
-  writeHostCalendarEvent,
+  tryWriteHostCalendarEvent,
 } from '@/lib/ciba-flow'
 import { isBoardDemoEnabled } from '@/lib/demo-flags'
 import { auth0 } from '@/lib/auth0'
-import { canWriteHostCalendar } from '@/lib/host'
-import { getDemoHost } from '@/lib/board-config'
-import { isGoogleConnected } from '@/lib/google'
 import {
   approveClaimWithoutBoard,
   flagFraud,
+  getClaim,
   saveClaimDetails,
   submitClaim,
 } from '@/lib/claims'
-import { MOCK_VEHICLE_DATA } from '@/lib/agent/system-prompt'
+import {
+  MOCK_VEHICLE_DATA,
+  SETTINGS_CHAT_LINK,
+} from '@/lib/agent/system-prompt'
 import type { Claim } from '@/lib/types'
+
+function googleCalendarNotConnectedToolResult(): string {
+  return [
+    'Google Calendar is not connected, so no Token Vault event was written.',
+    `Tell the user to connect Google Calendar in ${SETTINGS_CHAT_LINK}. Include that markdown link in your reply.`,
+    'Tell them to come back to this same chat after connecting — the full conversation and claim will still be here.',
+    'Do not tell them to start a new claim. Do not mention a CIBA board or QR.',
+  ].join(' ')
+}
+
+async function writeCalendarOrExplain(claimId: string): Promise<string> {
+  const session = await auth0.getSession()
+  if (!session) {
+    return 'Not signed in. The calendar event was not written.'
+  }
+  const result = await tryWriteHostCalendarEvent(claimId, session.user)
+  switch (result) {
+    case 'written':
+      return 'A Google Calendar event was written via Auth0 Token Vault. Tell the user it is on the calendar.'
+    case 'already':
+      return 'A Google Calendar event is already on this claim. Tell the user it is already on the calendar.'
+    case 'no_google':
+      return googleCalendarNotConnectedToolResult()
+    case 'not_admin':
+      return 'This session is not an admin, so Token Vault did not write a calendar event.'
+    case 'skipped':
+      return 'No calendar write for this claim status. If they still need to file, use publish_claim_submission.'
+    default:
+      return 'Could not write the calendar event. Tell the user to try again. Do not say the demo is broken.'
+  }
+}
 
 /**
  * AI SDK tools for one claim. Each execute writes Neon, then the agent
@@ -95,26 +127,39 @@ Ask the user if they are ready to submit this claim for processing.`
           return cibaStartAgentMessage(ciba)
         }
         await approveClaimWithoutBoard(claim.id)
-        const session = await auth0.getSession()
-        const host = await getDemoHost()
-        const google = await isGoogleConnected()
-        if (session && canWriteHostCalendar(session.user, host) && google) {
-          await writeHostCalendarEvent(claim.id)
-          return [
-            'Claim submitted and approved.',
-            'A Google Calendar event was written via Auth0 Token Vault.',
-            'Thank the user. Do not mention a CIBA board or QR.',
-          ].join(' ')
-        }
+        const calendar = await writeCalendarOrExplain(claim.id)
         return [
           'Claim submitted and approved.',
-          google
-            ? 'This session is not an admin, so Token Vault did not write a calendar event.'
-            : 'Google Calendar is not connected, so no Token Vault event was written. Tell the user an admin can connect Google on /settings.',
+          calendar,
           'Do not mention a CIBA board or QR.',
         ].join(' ')
       },
     }),
+
+    ...(isBoardDemoEnabled()
+      ? {}
+      : {
+          write_calendar_event: tool({
+            description:
+              'Write this filed claim to Google Calendar via Auth0 Token Vault. Call when the user asks to put the claim on the calendar and it is already submitted, or after they connect Google in Settings and come back. If Google is not connected, the result tells them to open Settings — include that link. Do not mention a CIBA board or QR.',
+            inputSchema: z.object({
+              confirm: z
+                .boolean()
+                .optional()
+                .describe('True when they asked to put this claim on the calendar'),
+            }),
+            execute: async () => {
+              const latest = (await getClaim(claim.id)) ?? claim
+              if (latest.status === 'cancelled') {
+                return 'This claim is cancelled. Do not write a calendar event.'
+              }
+              if (latest.status === 'pending') {
+                return 'The claim is not submitted yet. If they confirmed they want it filed and on the calendar, use publish_claim_submission instead.'
+              }
+              return writeCalendarOrExplain(latest.id)
+            },
+          }),
+        }),
 
     cancel_claim: tool({
       description:

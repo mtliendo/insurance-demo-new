@@ -272,12 +272,42 @@ export async function pollCibaForClaim(
   return getClaim(claimId)
 }
 
-export async function writeHostCalendarEvent(claimId: string): Promise<void> {
+export type CalendarWriteResult =
+  | 'written'
+  | 'already'
+  | 'no_google'
+  | 'not_admin'
+  | 'skipped'
+  | 'failed'
+
+/**
+ * Token Vault calendar write for the Iowa (no-board) talk path. Safe to
+ * call on /file-claim resume after the host connects Google in Settings.
+ */
+export async function tryWriteHostCalendarEvent(
+  claimId: string,
+  actor: SessionUser,
+): Promise<CalendarWriteResult> {
+  if (isBoardDemoEnabled()) return 'skipped'
   const claim = await getClaim(claimId)
-  if (!claim || claim.calendarEventId) return
+  if (!claim || claim.status === 'cancelled' || claim.status === 'pending') {
+    return 'skipped'
+  }
+  if (claim.calendarEventId) return 'already'
+  if (!canWriteHostCalendar(actor, await getDemoHost())) return 'not_admin'
+  if (!(await isGoogleConnected())) return 'no_google'
+  const eventId = await writeHostCalendarEvent(claimId)
+  if (eventId) return 'written'
+  return (await getClaim(claimId))?.calendarEventId ? 'already' : 'failed'
+}
+
+export async function writeHostCalendarEvent(claimId: string): Promise<string | null> {
+  const claim = await getClaim(claimId)
+  if (!claim) return null
+  if (claim.calendarEventId) return claim.calendarEventId
 
   const token = await getGoogleAccessToken()
-  if (!token) return
+  if (!token) return null
 
   const yeses = (await listCibaForClaim(claimId))
     .filter((row) => row.status === 'approved')
@@ -305,7 +335,9 @@ export async function writeHostCalendarEvent(claimId: string): Promise<void> {
       timeZone: 'America/Los_Angeles',
     })
     await attachCalendarEvent(claimId, event.id)
+    return event.id
   } catch (error) {
     console.error('Failed to write host calendar event:', error)
+    return null
   }
 }

@@ -100,13 +100,17 @@ export async function getClaim(id: string): Promise<Claim | null> {
   return rows[0] ? toClaim(rows[0]) : null
 }
 
-/** Most recent claim for a user — lets the file-claim page resume instead of restarting. */
+/**
+ * Most recent claim for a user — /file-claim resumes this row (messages
+ * included) after a Settings detour. Includes approved and cancelled;
+ * "New chat" inserts a newer pending row instead of wiping this one.
+ */
 export async function getLatestClaimForUser(userId: string): Promise<Claim | null> {
   await ensureBoardRulesSchema()
   await ensureClaimStatusSchema()
   const rows = (await sql`
     select * from claims
-    where user_id = ${userId} and status not in ('approved', 'cancelled')
+    where user_id = ${userId}
     order by created_at desc
     limit 1
   `) as ClaimRow[]

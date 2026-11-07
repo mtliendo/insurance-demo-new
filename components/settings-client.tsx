@@ -1,8 +1,10 @@
 'use client'
 
+import Link from 'next/link'
 import { CheckCircle2, Key, Shield, XCircle } from 'lucide-react'
 import { hostConnectAccountHref } from '@/lib/google-connect'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 
@@ -27,8 +29,12 @@ export function SettingsClient({
           </h1>
           <p className="mt-2 text-muted-foreground">
             Only the host connects Google Calendar via Auth0 Token Vault.
-            File a claim after this is connected so an event can be written.
+            After connecting, return to the claim chat — the conversation is
+            still there, and the appointment can be written.
           </p>
+          <Button asChild variant="hud" size="sm" className="mt-4">
+            <Link href="/file-claim">Return to claim chat</Link>
+          </Button>
         </div>
 
         {connectError && (

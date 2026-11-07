@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import Confetti from 'react-confetti'
-import { CheckCircle2, Send, ShieldHalf } from 'lucide-react'
+import { CheckCircle2, MessageSquarePlus, Send, ShieldHalf } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -40,9 +41,18 @@ export function FileClaimClient({
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 })
 
-  const startClaim = useCallback(async () => {
+  const startClaim = useCallback(async (opts?: { newChat?: boolean }) => {
     const generation = ++startGeneration.current
-    const res = await fetch('/api/claims', { method: 'POST' })
+    const res = await fetch('/api/claims', {
+      method: 'POST',
+      cache: 'no-store',
+      ...(opts?.newChat
+        ? {
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newChat: true }),
+          }
+        : {}),
+    })
     if (!res.ok) {
       throw new Error('Failed to start claim')
     }
@@ -61,6 +71,19 @@ export function FileClaimClient({
     setShowApprovalModal(false)
     setSnapshot(null)
     await startClaim()
+  }, [startClaim])
+
+  const newChat = useCallback(async () => {
+    if (!window.confirm('Start a new chat? This begins a fresh claim conversation.')) {
+      return
+    }
+    startGeneration.current += 1
+    liveClaimId.current = null
+    setShowApprovalModal(false)
+    setSnapshot(null)
+    setCurrentMessage('')
+    setIsSending(false)
+    await startClaim({ newChat: true })
   }, [startClaim])
 
   // Start (or resume) the claim.
@@ -246,7 +269,19 @@ export function FileClaimClient({
               incident to the claims assistant and it will build the report as you talk.
             </p>
           </div>
-          {isHost && <ClearClaimButton onCleared={resetClaim} />}
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void newChat()}
+              disabled={isSending}
+            >
+              <MessageSquarePlus className="h-4 w-4" />
+              New chat
+            </Button>
+            {isHost && <ClearClaimButton onCleared={resetClaim} />}
+          </div>
         </div>
 
         <div className="flex flex-col gap-6 lg:flex-row">
@@ -290,7 +325,11 @@ export function FileClaimClient({
                           : 'rounded-r-lg rounded-bl-lg border border-border/70 bg-secondary/60 text-foreground/90'
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{message.content}</p>
+                      <p className="whitespace-pre-wrap">
+                        {message.role === 'assistant'
+                          ? renderChatLinks(message.content)
+                          : message.content}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -433,6 +472,22 @@ export function FileClaimClient({
                   </p>
                 )}
 
+                {!showBoardUi &&
+                  !googleConnected &&
+                  !claim.calendarEventId &&
+                  (isApproved || isAwaiting) && (
+                    <p className="mt-3 text-xs text-gold">
+                      Connect Google Calendar in{' '}
+                      <Link
+                        href="/settings"
+                        className="font-medium text-foreground underline underline-offset-2"
+                      >
+                        Settings
+                      </Link>
+                      , then come back to this chat to add the appointment.
+                    </p>
+                  )}
+
                 {showBoardUi && isAwaiting && board.blockReason === 'no_board' && (
                   <p className="mt-3 text-xs text-gold">
                     Waiting on a full board of {board.boardSize}. The host console
@@ -477,6 +532,45 @@ export function FileClaimClient({
       </div>
     </div>
   )
+}
+
+const CHAT_LINK_RE = /\[([^\]]+)\]\((\/[^\s)]+|https?:\/\/[^\s)]+)\)/g
+
+/** Turn assistant markdown links such as [Settings](/settings) into real links. */
+function renderChatLinks(content: string): ReactNode[] {
+  const parts: ReactNode[] = []
+  let lastIndex = 0
+  let key = 0
+  for (const match of content.matchAll(CHAT_LINK_RE)) {
+    const index = match.index ?? 0
+    if (index > lastIndex) parts.push(content.slice(lastIndex, index))
+    const href = match[2]
+    const external = href.startsWith('http://') || href.startsWith('https://')
+    parts.push(
+      external ? (
+        <a
+          key={key++}
+          href={href}
+          className="font-medium text-hud underline underline-offset-2"
+          target="_blank"
+          rel="noreferrer"
+        >
+          {match[1]}
+        </a>
+      ) : (
+        <Link
+          key={key++}
+          href={href}
+          className="font-medium text-hud underline underline-offset-2"
+        >
+          {match[1]}
+        </Link>
+      ),
+    )
+    lastIndex = index + match[0].length
+  }
+  if (lastIndex < content.length) parts.push(content.slice(lastIndex))
+  return parts.length > 0 ? parts : [content]
 }
 
 /** True when the in-flight turn is a cancel request (CIBA pending beat). */
