@@ -18,7 +18,13 @@ import {
   getClaim,
   setCibaBlockReason,
 } from '@/lib/claims'
-import { createEvent } from '@/lib/google-calendar'
+import {
+  createEvent,
+  formatInChicago,
+  resolveEventWindow,
+  type CalendarEvent,
+  type EventWindow,
+} from '@/lib/google-calendar'
 import { getGoogleAccessToken, isGoogleConnected } from '@/lib/google'
 import { auth0 } from '@/lib/auth0'
 import {
@@ -272,13 +278,38 @@ export async function pollCibaForClaim(
   return getClaim(claimId)
 }
 
+export type CalendarEventDetails = {
+  title: string
+  startCt: string
+  endCt: string
+  htmlLink?: string
+}
+
+export type CalendarWriteOptions = {
+  startDateTime?: string
+  durationMinutes?: number
+  summary?: string
+}
+
 export type CalendarWriteResult =
-  | 'written'
-  | 'already'
-  | 'no_google'
-  | 'not_admin'
-  | 'skipped'
-  | 'failed'
+  | { status: 'written'; event: CalendarEventDetails }
+  | { status: 'already' }
+  | { status: 'no_google' }
+  | { status: 'not_admin' }
+  | { status: 'skipped' }
+  | { status: 'failed' }
+
+function detailsFromEvent(
+  event: CalendarEvent,
+  window: { startDateTime: string; endDateTime: string },
+): CalendarEventDetails {
+  return {
+    title: event.summary,
+    startCt: formatInChicago(event.start?.dateTime || window.startDateTime),
+    endCt: formatInChicago(event.end?.dateTime || window.endDateTime),
+    htmlLink: event.htmlLink,
+  }
+}
 
 /**
  * Token Vault calendar write for the Iowa (no-board) talk path. Safe to
@@ -287,24 +318,38 @@ export type CalendarWriteResult =
 export async function tryWriteHostCalendarEvent(
   claimId: string,
   actor: SessionUser,
+  options?: CalendarWriteOptions,
 ): Promise<CalendarWriteResult> {
-  if (isBoardDemoEnabled()) return 'skipped'
+  if (isBoardDemoEnabled()) return { status: 'skipped' }
   const claim = await getClaim(claimId)
   if (!claim || claim.status === 'cancelled' || claim.status === 'pending') {
-    return 'skipped'
+    return { status: 'skipped' }
   }
-  if (claim.calendarEventId) return 'already'
-  if (!canWriteHostCalendar(actor, await getDemoHost())) return 'not_admin'
-  if (!(await isGoogleConnected())) return 'no_google'
-  const eventId = await writeHostCalendarEvent(claimId)
-  if (eventId) return 'written'
-  return (await getClaim(claimId))?.calendarEventId ? 'already' : 'failed'
+  if (claim.calendarEventId) return { status: 'already' }
+  if (!canWriteHostCalendar(actor, await getDemoHost())) {
+    return { status: 'not_admin' }
+  }
+  if (!(await isGoogleConnected())) return { status: 'no_google' }
+  const event = await writeHostCalendarEvent(claimId, options)
+  if (event) {
+    const window = resolveEventWindow(
+      options?.startDateTime,
+      options?.durationMinutes,
+    )
+    return { status: 'written', event: detailsFromEvent(event, window) }
+  }
+  return {
+    status: (await getClaim(claimId))?.calendarEventId ? 'already' : 'failed',
+  }
 }
 
-export async function writeHostCalendarEvent(claimId: string): Promise<string | null> {
+export async function writeHostCalendarEvent(
+  claimId: string,
+  options?: CalendarWriteOptions,
+): Promise<CalendarEvent | null> {
   const claim = await getClaim(claimId)
   if (!claim) return null
-  if (claim.calendarEventId) return claim.calendarEventId
+  if (claim.calendarEventId) return null
 
   const token = await getGoogleAccessToken()
   if (!token) return null
@@ -314,12 +359,22 @@ export async function writeHostCalendarEvent(claimId: string): Promise<string | 
     .map((row) => row.name)
     .join(', ')
 
-  const start = new Date()
-  const end = new Date(start.getTime() + 30 * 60 * 1000)
+  let eventWindow: EventWindow
+  try {
+    eventWindow = resolveEventWindow(
+      options?.startDateTime,
+      options?.durationMinutes,
+    )
+  } catch (error) {
+    console.error('Failed to resolve calendar event window:', error)
+    return null
+  }
 
   try {
     const event = await createEvent(token, {
-      summary: `Hero Shield claim approved · ${claim.policyId}`,
+      summary:
+        options?.summary?.trim() ||
+        `Hero Shield claim approved · ${claim.policyId}`,
       description: [
         claim.incidentDescription ?? 'Superhero incident',
         claim.incidentLocation ? `Location: ${claim.incidentLocation}` : null,
@@ -330,12 +385,12 @@ export async function writeHostCalendarEvent(claimId: string): Promise<string | 
         .filter(Boolean)
         .join('\n'),
       location: claim.incidentLocation ?? undefined,
-      startDateTime: start.toISOString(),
-      endDateTime: end.toISOString(),
-      timeZone: 'America/Los_Angeles',
+      startDateTime: eventWindow.startDateTime,
+      endDateTime: eventWindow.endDateTime,
+      timeZone: eventWindow.timeZone,
     })
     await attachCalendarEvent(claimId, event.id)
-    return event.id
+    return event
   } catch (error) {
     console.error('Failed to write host calendar event:', error)
     return null

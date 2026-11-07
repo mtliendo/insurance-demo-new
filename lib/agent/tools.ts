@@ -6,6 +6,7 @@ import {
   startCibaForSubmittedClaim,
   tryWriteHostCalendarEvent,
 } from '@/lib/ciba-flow'
+import { resolveEventWindow } from '@/lib/google-calendar'
 import { isBoardDemoEnabled } from '@/lib/demo-flags'
 import { auth0 } from '@/lib/auth0'
 import {
@@ -30,15 +31,33 @@ function googleCalendarNotConnectedToolResult(): string {
   ].join(' ')
 }
 
-async function writeCalendarOrExplain(claimId: string): Promise<string> {
+async function writeCalendarOrExplain(
+  claimId: string,
+  when: {
+    startDateTime: string
+    durationMinutes?: number
+    summary?: string
+  },
+): Promise<string> {
   const session = await auth0.getSession()
   if (!session) {
     return 'Not signed in. The calendar event was not written.'
   }
-  const result = await tryWriteHostCalendarEvent(claimId, session.user)
-  switch (result) {
-    case 'written':
-      return 'A Google Calendar event was written via Auth0 Token Vault. Tell the user it is on the calendar.'
+  const result = await tryWriteHostCalendarEvent(claimId, session.user, when)
+  switch (result.status) {
+    case 'written': {
+      const link = result.event.htmlLink
+        ? `htmlLink: ${result.event.htmlLink}`
+        : 'No htmlLink was returned.'
+      return [
+        'A Google Calendar event was written via Auth0 Token Vault.',
+        `Title: ${result.event.title}`,
+        `Start (CT): ${result.event.startCt}`,
+        `End (CT): ${result.event.endCt}`,
+        link,
+        'Tell the user the event title, the date and time in CT, and include the link in your reply.',
+      ].join('\n')
+    }
     case 'already':
       return 'A Google Calendar event is already on this claim. Tell the user it is already on the calendar.'
     case 'no_google':
@@ -111,7 +130,7 @@ Ask the user if they are ready to submit this claim for processing.`
     publish_claim_submission: tool({
       description: isBoardDemoEnabled()
         ? 'Submit the claim after the user explicitly confirms they want it sent. Flips the claim to awaiting_approval. Starts CIBA only from the host session (same grant as POST /api/ciba). A non-host filer gets not_host — the operator console on /host starts CIBA automatically. The tool result says whether mail went out, that the console is starting it, or why it is blocked. Tell the user that. If not_host, say the board is being emailed / it is starting. Do not tell a non-host to click Send CIBA. Do not claim the board was emailed unless the result says CIBA started, is already live, or not_host (console will start it).'
-        : 'Submit the claim after the user explicitly confirms they want it sent. Marks it approved and writes one Google Calendar event via Auth0 Token Vault when this session is an admin with Google connected. Do not mention a CIBA board, QR, or seated members. Tell the user whether the calendar event was written.',
+        : 'Submit the claim after the user explicitly confirms they want it sent. Marks it approved. Does not write a calendar event — use write_calendar_event after the user gives a date and time. Do not mention a CIBA board, QR, or seated members.',
       inputSchema: z.object({
         confirmSubmission: z
           .boolean()
@@ -127,10 +146,10 @@ Ask the user if they are ready to submit this claim for processing.`
           return cibaStartAgentMessage(ciba)
         }
         await approveClaimWithoutBoard(claim.id)
-        const calendar = await writeCalendarOrExplain(claim.id)
         return [
           'Claim submitted and approved.',
-          calendar,
+          'No calendar event was written.',
+          'If they also want it on the calendar or an appointment, ask for a date and time in America/Chicago, then use write_calendar_event. Do not invent a time.',
           'Do not mention a CIBA board or QR.',
         ].join(' ')
       },
@@ -141,22 +160,45 @@ Ask the user if they are ready to submit this claim for processing.`
       : {
           write_calendar_event: tool({
             description:
-              'Write this filed claim to Google Calendar via Auth0 Token Vault. Call when the user asks to put the claim on the calendar and it is already submitted, or after they connect Google in Settings and come back. If Google is not connected, the result tells them to open Settings — include that link. Do not mention a CIBA board or QR.',
+              'Write this filed claim (or an appointment to speak with an agent) to Google Calendar via Auth0 Token Vault. Call only after the user has given a date and time in America/Chicago — ask first if they have not. Also call for requests like "set up an appointment to speak with an agent" once you have a time. Interpret relative times using the current America/Chicago date in the system prompt. If Google is not connected, the result tells them to open Settings — include that link. Do not mention a CIBA board or QR. After success, tell the user the title, CT start/end, and htmlLink.',
             inputSchema: z.object({
-              confirm: z
-                .boolean()
+              startDateTime: z
+                .string()
+                .describe(
+                  'Start in America/Chicago as YYYY-MM-DDTHH:mm:ss (no Z). Example: 2026-11-08T14:00:00 for 2:00 PM CT. Required — do not invent a time.',
+                ),
+              durationMinutes: z
+                .number()
                 .optional()
-                .describe('True when they asked to put this claim on the calendar'),
+                .describe('Length in minutes. Defaults to 30 if omitted.'),
+              summary: z
+                .string()
+                .optional()
+                .describe(
+                  'Event title. Omit for the default claim-approved title. For an appointment to speak with an agent, use a title like "Appointment with claims agent".',
+                ),
             }),
-            execute: async () => {
+            execute: async ({ startDateTime, durationMinutes, summary }) => {
+              if (!startDateTime?.trim()) {
+                return 'No start time. Ask the user for a date and time in America/Chicago, then call this tool again. Do not invent a time.'
+              }
+              try {
+                resolveEventWindow(startDateTime, durationMinutes)
+              } catch {
+                return 'Could not parse startDateTime. Ask the user for a date and time in America/Chicago and try again. Do not invent a time.'
+              }
               const latest = (await getClaim(claim.id)) ?? claim
               if (latest.status === 'cancelled') {
                 return 'This claim is cancelled. Do not write a calendar event.'
               }
               if (latest.status === 'pending') {
-                return 'The claim is not submitted yet. If they confirmed they want it filed and on the calendar, use publish_claim_submission instead.'
+                return 'The claim is not submitted yet. If they confirmed they want it filed and on the calendar, use publish_claim_submission first, then call this tool with the same startDateTime.'
               }
-              return writeCalendarOrExplain(latest.id)
+              return writeCalendarOrExplain(latest.id, {
+                startDateTime,
+                durationMinutes,
+                summary,
+              })
             },
           }),
         }),
