@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth0, generatePolicyId, policyIdFromUser } from '@/lib/auth0'
-import { addMessage, createClaim, getLatestClaimForUser } from '@/lib/claims'
+import { pollCancelCibaForClaim } from '@/lib/ciba-cancel'
+import { addMessage, createClaim, getClaim, getLatestClaimForUser } from '@/lib/claims'
 import { buildClaimSnapshot } from '@/lib/snapshot'
 import type { ClaimSnapshot } from '@/lib/types'
 
@@ -27,7 +28,11 @@ export async function POST() {
   const existing = await getLatestClaimForUser(userId)
 
   if (existing) {
-    const snapshot: ClaimSnapshot = await buildClaimSnapshot(existing)
+    if (existing.cancelCibaStatus === 'pending') {
+      await pollCancelCibaForClaim(existing.id)
+    }
+    const latest = (await getClaim(existing.id)) ?? existing
+    const snapshot: ClaimSnapshot = await buildClaimSnapshot(latest)
     return NextResponse.json(snapshot)
   }
 

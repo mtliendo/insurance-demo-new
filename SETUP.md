@@ -2,7 +2,7 @@
 
 Everything this app needs to run locally: **three sets of secrets** (Auth0, Neon,
 Vercel AI Gateway), **one schema migration**, and two Auth0 add-ons the stage
-demo depends on — **CIBA email** (`requested_expiry=600`) and **Token Vault**
+demo depends on — **CIBA email** (`requested_expiry` above 300) and **Token Vault**
 for the host's Google Calendar. Nothing else — no second app, no build step
 beyond `pnpm dev`.
 
@@ -150,7 +150,8 @@ Auth0 picks the channel from `requested_expiry`:
 - **300 seconds or less:** Guardian push
 - **301 to 259200 seconds:** email
 
-This demo always sends `requested_expiry=600`. `login_hint` is `iss_sub` (that
+Board CIBA sends `requested_expiry=600`. `cancel_claim` sends `301` (~5
+minutes, above 300 so Auth0 uses email). `login_hint` is `iss_sub` (that
 board member's Auth0 `sub`), never a raw email. `binding_message` is at most
 64 characters, charset `A-Za-z0-9+-_.,:#`, no spaces
 (`Hulk-smash-claim-<id>`). `cancel_claim` uses `Cancel-claim-#<id>` and
@@ -306,7 +307,7 @@ Then walk the happy path:
 | Board member missing from pick | Email not verified on the Auth0 user, or they are the configured host |
 | Calendar event missing after the threshold yeses | Token Vault Google connection dropped; reconnect on `/settings` |
 | Cancel CIBA email never arrives | Same grant as the board: CIBA + **email** channel enabled, Asynchronous Approval template on, filer has a **verified** email. Binding message is `Cancel-claim-#<id>` (no spaces). Google Calendar is **not** required for cancel. |
-| `cancel my claim` times out | Approve the email within ~70s (optional `CIBA_CANCEL_WAIT_MS`). Claim stays unchanged; say it again after you approve. |
+| `cancel my claim` times out | Approve the email within ~5 minutes (Auth0 `requested_expiry=301`). Denied only after Decline or Auth0 `expired_token`. Claim stays unchanged; say it again after you approve. |
 
 ---
 

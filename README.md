@@ -27,7 +27,7 @@ on purpose — they are the point of the talk:
 | **Regular Web Application** + server session cookie | `@auth0/nextjs-auth0` v4 in [proxy.ts](proxy.ts) / [lib/auth0.ts](lib/auth0.ts). Not a SPA. Needs a client secret. |
 | **Email verification** | Unverified joiners watch `/join`; they cannot sit on the CIBA board |
 | **Custom ID token claims** | Optional post-login Action sets `https://claims.interview-demo.com/policyId` |
-| **CIBA (Client-Initiated Backchannel Authentication)** | `cancel_claim` emails the **signed-in user** (`login_hint` iss_sub, `iss=https://${AUTH0_DOMAIN}/`, `requested_expiry=600` so it goes by **email** not Guardian). Manifest shows pending / approved / denied. Approval sets status `cancelled`. Requires **Essentials (or Professional) + Auth0 for AI Agents add-on**. The seated-board grant is still in the repo behind `NEXT_PUBLIC_DEMO_BOARD_ENABLED=1` (default **off**). |
+| **CIBA (Client-Initiated Backchannel Authentication)** | `cancel_claim` emails the **signed-in user** (`login_hint` iss_sub, `iss=https://${AUTH0_DOMAIN}/`, `requested_expiry=301` so it goes by **email** not Guardian and lasts ~5 minutes). Manifest shows pending / approved / denied. Approval sets status `cancelled`. Requires **Essentials (or Professional) + Auth0 for AI Agents add-on**. The seated-board grant is still in the repo behind `NEXT_PUBLIC_DEMO_BOARD_ENABLED=1` (default **off**). |
 | **CIBA email / Asynchronous Approval template** | Branding → Email Templates → Asynchronous Approval. `login_hint` is `iss_sub`. |
 | **Token Vault** | Host-only Google Calendar connect on `/settings` (`/auth/connect`). Audience never sees Google consent. |
 | **First-party confidential client** | Required for the CIBA grant (`oidc_conformant`, not `token_endpoint_auth_method: none`) |
@@ -49,9 +49,9 @@ Board seating, QR, and `/join` are **off** unless you set
 2. **File the Hulk-smashed Honda Pilot** on `/file-claim`. Confirm submit.
    The agent writes one event on that Google Calendar (no seated board).
 3. **Type `cancel my claim`.** CIBA emails the signed-in user
-   (`login_hint` iss_sub of **this session**, `requested_expiry=600`).
+   (`login_hint` iss_sub of **this session**, `requested_expiry=301`).
    Chat/manifest show **pending**. Accept → claim **cancelled**. Decline or
-   timeout → unchanged, status **denied**.
+   Auth0 expiry (~5 minutes) → unchanged, status **denied**.
 
 Admin calendar writes match **email**, not a stored Auth0 `sub` from an old
 tenant.
@@ -80,7 +80,8 @@ gates the protected pages. API routes check the session themselves so a
 
 **CIBA.** [lib/ciba.ts](lib/ciba.ts) copies the working loop from
 [mtliendo/ciba-email](https://github.com/mtliendo/ciba-email). This app does
-**not** use `@auth0/ai`. `requested_expiry=600` selects the email channel.
+**not** use `@auth0/ai`. `requested_expiry` above 300 selects the email channel
+(board uses 600; `cancel_claim` uses 301).
 
 **Token Vault.** [lib/auth0.ts](lib/auth0.ts) sets
 `enableConnectAccountEndpoint: true`. Audience login is `openid profile email`
@@ -93,12 +94,14 @@ loop. Same conversation, four tools. Calls go through the AI Gateway
 the claim to `awaiting_approval` and calls `startCibaForSubmittedClaim`
 (admin session only). A non-admin filer gets `not_host`; `GET /api/board`
 on the open `/host` console starts the same grant. `cancel_claim` emails
-the policyholder (not the board), waits on CIBA, then sets `cancelled`.
+the policyholder (not the board), stores the Auth0 `auth_req_id`, and
+returns pending. `GET /api/claims/[id]` polls until Accept, Decline, or
+Auth0 expiry, then sets `cancelled` or leaves the claim unchanged.
 
 **State and realtime.** There is no websocket. `/file-claim` and `/host`
 refresh UI every 2s. Auth0 `/oauth/token` is only hit when a pending
-`auth_req_id` is due (board poll, or `cancel_claim` waiting on the
-policyholder).
+`auth_req_id` is due (board poll, or cancel-claim CIBA on the claim
+owner's snapshot poll).
 
 ### Routes
 
@@ -112,7 +115,7 @@ policyholder).
 | `/profile` | protected | Auth0 profile and the `policyId` custom claim |
 | `POST /api/claims` | protected | Starts or resumes the caller's claim |
 | `POST /api/claims/reset` | admin | Wipe projector claim + chat / CIBA + seated board |
-| `GET /api/claims/[id]` | protected | Claim snapshot; admin ticks due CIBA ids |
+| `GET /api/claims/[id]` | protected | Claim snapshot; owner ticks cancel CIBA; admin ticks due board CIBA ids |
 | `POST /api/claims/[id]/chat` | protected | One agent turn (AI Gateway) |
 | `GET \| POST /api/join` | login | Upsert joiner; seat / CIBA status for this phone |
 | `GET /api/board` | admin | Joiners + live board + CIBA snapshot; auto-starts CIBA |
@@ -188,9 +191,7 @@ seated board. Google Calendar / Token Vault is not required.
 
 1. On `/file-claim`, file a claim as usual (or stop after details are saved).
 2. Type: **`cancel my claim`** (or name it, e.g. the 8-char ID on the manifest).
-3. Chat shows **Waiting for your approval, check your email** while the tool waits.
+3. Chat tells you to check your email. Manifest **Cancel CIBA** stays **Pending**.
 4. Open the Asynchronous Approval email. Request code looks like `Cancel-claim-#<id>` (no spaces; matches the manifest ID).
-5. **Accept** → agent says the claim is cancelled; manifest badge **Cancelled**.
-6. **Decline** (or wait ~70s) → claim is unchanged; agent says so. Type `cancel my claim` again if you still want it gone.
-
-Optional: `CIBA_CANCEL_WAIT_MS` in `.env.local` (default `70000`). Keep it under the chat route `maxDuration` (90s).
+5. **Accept** → chat says the claim is cancelled; manifest badge **Cancelled**.
+6. **Decline** (or wait ~5 minutes for Auth0 expiry) → claim is unchanged; chat says so. Type `cancel my claim` again if you still want it gone.

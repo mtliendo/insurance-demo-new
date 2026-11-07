@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth0 } from '@/lib/auth0'
+import { pollCancelCibaForClaim } from '@/lib/ciba-cancel'
 import { pollCibaForClaim } from '@/lib/ciba-flow'
 import { getClaim } from '@/lib/claims'
 import { isAdmin } from '@/lib/host'
@@ -12,8 +13,9 @@ import type { ClaimSnapshot } from '@/lib/types'
  * app opened on `interviewDemo/attendee` — the client asks for the whole claim
  * snapshot on an interval instead of reacting to pushed events.
  *
- * Host sessions tick due CIBA auth_req_ids (stored interval, floor 5s).
- * Audience GETs read Neon only — they must not hammer /oauth/token.
+ * Host sessions tick due board CIBA auth_req_ids (stored interval, floor 5s).
+ * Audience GETs read Neon only for the board grant — they must not hammer
+ * /oauth/token. The claim owner may tick their own cancel-claim CIBA.
  */
 export async function GET(
   _request: Request,
@@ -29,6 +31,11 @@ export async function GET(
 
   if (!claim || claim.userId !== session.user.sub) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  if (claim.cancelCibaStatus === 'pending') {
+    await pollCancelCibaForClaim(claim.id)
+    claim = (await getClaim(id)) ?? claim
   }
 
   const hostPolling = isAdmin(session.user)
